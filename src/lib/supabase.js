@@ -1,8 +1,11 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export async function rpc(fnName, dashboardToken) {
+export async function rpc(fnName, dashboardToken, panel = null) {
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`;
+  const body = { p_token: dashboardToken };
+  if (panel) body.p_panel = panel;
+
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -12,7 +15,7 @@ export async function rpc(fnName, dashboardToken) {
         "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         "Prefer": "return=representation",
       },
-      body: JSON.stringify({ p_token: dashboardToken }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
@@ -21,8 +24,7 @@ export async function rpc(fnName, dashboardToken) {
       return null;
     }
 
-    const raw = await res.json();
-    return raw;
+    return await res.json();
   } catch (e) {
     console.error(`[FalowCRM] RPC ${fnName} error:`, e);
     return null;
