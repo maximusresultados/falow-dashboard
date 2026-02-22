@@ -18,10 +18,7 @@ function DashboardWithToken() {
           background: "#0f1520", border: "1px solid #1a2235", borderRadius: 16,
           padding: 48, maxWidth: 440, textAlign: "center",
         }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>🔒</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#e8ecf4", marginBottom: 8 }}>
-            <span style={{ color: "#4f8aff" }}>Falow</span>CRM
-          </div>
+          <img src="https://pdolixqxogpwufwunyds.supabase.co/storage/v1/object/public/LOGO%20FALOW%20CRM/LOGO%20FALOWCRM%20-%20OFICIAL%20(1200%20x%20500%20px)%20(3).png" alt="FalowCRM" style={{ height: 42, marginBottom: 20 }} />
           <div style={{ fontSize: 14, color: "#7a8baa", lineHeight: 1.6 }}>
             Acesso não autorizado.<br />
             Utilize o link fornecido pela sua empresa para acessar o dashboard.
