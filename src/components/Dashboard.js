@@ -50,6 +50,141 @@ const C = {
 const NUM_FONT = "'Poppins', sans-serif";
 
 // ══════════════════════════════════════════════
+// GLOSSÁRIO POR PÁGINA
+// ══════════════════════════════════════════════
+
+const GLOSSARY = {
+  overview: {
+    title: "Glossário — Visão Geral",
+    items: [
+      { term: "Cards Ativos", desc: "Quantidade de cards no pipeline, em etapas que não são finais. São as oportunidades em andamento (contatos, negociações, orçamentos). Não inclui cards vendidos, perdidos ou arquivados." },
+      { term: "Valor Pipeline", desc: "Soma do valor monetário de todos os cards ativos. Representa o potencial de receita que está em negociação." },
+      { term: "Atrasados", desc: "Cards ativos que passaram da data de vencimento. São oportunidades que precisam de atenção imediata — quanto mais tempo atrasados, maior o risco de perder o negócio." },
+      { term: "Ticket Médio", desc: "Valor médio dos cards ganhos (Vendido, GANHA, Faturado). Calculado como: receita total ÷ quantidade de ganhos. Indica o tamanho médio de cada venda fechada." },
+      { term: "Ganhos", desc: "Total de cards que chegaram em etapas de vitória (Vendido, GANHA, Faturado). Cada card ganho representa uma venda concretizada." },
+      { term: "Perdidos", desc: "Total de cards que chegaram em etapas de perda (Perdida, PERDIDA). São oportunidades que não se converteram em venda." },
+      { term: "Receita Total", desc: "Soma do valor monetário de todos os cards ganhos. É o faturamento real gerado." },
+      { term: "Conversão", desc: "Percentual de cards finalizados que foram ganhos. Fórmula: ganhos ÷ (ganhos + perdidos) × 100. É o indicador mais importante de eficiência comercial." },
+      { term: "Evolução Mensal", desc: "Gráfico que mostra mês a mês quantos cards foram criados, quantos foram ganhos e quantos foram perdidos. Permite identificar tendências e sazonalidades." },
+      { term: "Distribuição", desc: "Gráfico de pizza mostrando a proporção entre cards ganhos, perdidos e em pipeline. Dá uma visão rápida do estado geral do funil." },
+    ],
+  },
+  funnel: {
+    title: "Glossário — Funil de Vendas",
+    items: [
+      { term: "Cards por Etapa", desc: "Quantos cards estão em cada etapa do pipeline. Mostra onde os negócios estão concentrados. Se muitos cards acumulam em uma etapa, pode indicar um gargalo no processo." },
+      { term: "Valor por Etapa", desc: "Quanto dinheiro está em cada etapa. Uma etapa com poucos cards mas alto valor merece atenção especial, pois representa grandes oportunidades." },
+      { term: "% do Total", desc: "Proporção de cada etapa em relação ao total de cards. Ajuda a entender a distribuição do funil e identificar onde estão as maiores concentrações." },
+    ],
+  },
+  team: {
+    title: "Glossário — Equipe",
+    items: [
+      { term: "Ranking", desc: "Classifica os responsáveis por receita gerada, do maior para o menor. Mostra quem está contribuindo mais para o faturamento da empresa." },
+      { term: "Total", desc: "Quantidade total de cards atribuídos ao responsável, independente do status (ativo, ganho ou perdido)." },
+      { term: "Ganhos", desc: "Quantidade de cards que o responsável levou até uma etapa de vitória (Vendido, GANHA, Faturado)." },
+      { term: "Perdidos", desc: "Quantidade de cards que o responsável perdeu (etapas Perdida, PERDIDA)." },
+      { term: "Receita", desc: "Soma do valor monetário dos cards ganhos pelo responsável. Representa o faturamento gerado individualmente." },
+      { term: "Taxa de Conversão", desc: "Percentual de cards finalizados que foram ganhos por cada responsável. Verde (≥50%) indica boa performance, amarelo (25-49%) atenção, vermelho (<25%) precisa de suporte." },
+    ],
+  },
+  alerts: {
+    title: "Glossário — Alertas e Atrasos",
+    items: [
+      { term: "Cards Atrasados", desc: "Quantidade de cards ativos com data de vencimento ultrapassada. Cada card atrasado é uma oportunidade em risco." },
+      { term: "Valor em Risco", desc: "Soma do valor monetário dos cards atrasados. Representa quanto dinheiro pode ser perdido se esses negócios não forem trabalhados." },
+      { term: "Maior Atraso", desc: "Quantos dias tem o card mais antigo sem ação. Indica a situação mais crítica que precisa de atenção imediata." },
+      { term: "Média de Atraso", desc: "Média de dias de atraso entre todos os cards atrasados. Indica a gravidade geral da situação — quanto maior, mais urgente é agir." },
+      { term: "Atrasados por Responsável", desc: "Mostra quantos cards atrasados cada responsável possui. Ajuda a identificar quem precisa reorganizar suas prioridades." },
+      { term: "Dias de Atraso (tabela)", desc: "Na tabela detalhada, mostra há quantos dias cada card está atrasado. Vermelho (>7 dias) indica situação crítica, amarelo (≤7 dias) indica atenção." },
+    ],
+  },
+};
+
+function GlossaryModal({ glossary, onClose }) {
+  return (
+    <div onClick={onClose} style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "#000000aa", backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 9999, padding: 20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 16,
+        padding: 0, maxWidth: 560, width: "100%", maxHeight: "80vh",
+        overflow: "hidden", boxShadow: "0 24px 64px #000a",
+        display: "flex", flexDirection: "column",
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: "20px 24px", borderBottom: `1px solid ${C.border}`,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{glossary.title}</div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`,
+            background: "transparent", color: C.textMuted, fontSize: 16,
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 0.2s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.cardHover; e.currentTarget.style.color = C.text; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}
+          >✕</button>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: "16px 24px 24px", overflowY: "auto", flex: 1 }}>
+          {glossary.items.map((item, i) => (
+            <div key={i} style={{
+              padding: "14px 0",
+              borderBottom: i < glossary.items.length - 1 ? `1px solid ${C.border}40` : "none",
+            }}>
+              <div style={{
+                fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 5,
+                display: "flex", alignItems: "center", gap: 8,
+              }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: "50%", background: C.brand,
+                  flexShrink: 0,
+                }} />
+                {item.term}
+              </div>
+              <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6, paddingLeft: 14 }}>
+                {item.desc}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GlossaryButton({ onClick }) {
+  const [h, setH] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{
+        position: "fixed", bottom: 24, right: 24, zIndex: 1000,
+        width: 44, height: 44, borderRadius: 12,
+        border: `1px solid ${h ? C.borderLight : C.border}`,
+        background: h ? C.cardHover : C.card,
+        color: h ? C.brand : C.textMuted,
+        fontSize: 18, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: h ? `0 8px 24px ${C.brandGlow}` : "0 4px 12px #0004",
+        transition: "all 0.25s ease",
+        transform: h ? "translateY(-2px)" : "none",
+      }}
+      title="Glossário"
+    >?</button>
+  );
+}
+
+// ══════════════════════════════════════════════
 // UI COMPONENTS
 // ══════════════════════════════════════════════
 
@@ -184,6 +319,7 @@ export default function Dashboard({ token }) {
   const [invalidToken, setInvalidToken] = useState(false);
   const [panels, setPanels] = useState([]);
   const [selectedPanel, setSelectedPanel] = useState(null);
+  const [showGlossary, setShowGlossary] = useState(false);
 
   // Fetch panels list (once)
   useEffect(() => {
@@ -460,6 +596,10 @@ export default function Dashboard({ token }) {
             </div>
           )}
         </>)}
+
+        {/* GLOSSARY */}
+        <GlossaryButton onClick={() => setShowGlossary(true)} />
+        {showGlossary && <GlossaryModal glossary={GLOSSARY[tab]} onClose={() => setShowGlossary(false)} />}
 
         {/* FOOTER */}
         <div style={{ marginTop: 60, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
