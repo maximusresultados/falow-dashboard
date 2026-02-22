@@ -296,12 +296,9 @@ export default function Dashboard({ token }) {
       <header style={{ background: `${C.bgAlt}e8`, borderBottom: `1px solid ${C.border}`, padding: "12px 28px", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(16px)" }}>
         <div style={{ maxWidth: 1440, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <img src={ICON_URL} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "contain" }} />
-            <div>
-              <img src={LOGO_URL} alt="FalowCRM" style={{ height: 22, display: "block" }} />
-              {companyName && <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 2 }}>{companyName}</div>}
-            </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <img src={LOGO_URL} alt="FalowCRM" style={{ height: 42, display: "block" }} />
+            {companyName && <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 3 }}>{companyName}</div>}
           </div>
 
           {/* Tabs */}
