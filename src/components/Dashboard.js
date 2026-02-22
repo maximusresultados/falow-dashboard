@@ -47,6 +47,14 @@ const C = {
   funnelPalette: ["#06b6d4", "#4f8aff", "#a855f7", "#eab308", "#22c55e", "#34d399", "#f43f5e"],
 };
 
+function getFunnelColor(etapa, index) {
+  const name = (etapa || "").toLowerCase();
+  if (name.includes("faturado")) return "#39ff14";       // verde fluorescente
+  if (name.includes("vendido") || name.includes("ganha")) return "#166534"; // verde escuro
+  if (name.includes("perdida")) return "#ef4444";         // vermelho
+  return C.funnelPalette[index % C.funnelPalette.length];
+}
+
 const NUM_FONT = "'Poppins', sans-serif";
 
 // ══════════════════════════════════════════════
@@ -434,7 +442,7 @@ export default function Dashboard({ token }) {
           {/* Logo */}
           <div style={{ display: "flex", flexDirection: "column" }}>
             <img src={LOGO_URL} alt="FalowCRM" style={{ height: 42, display: "block" }} />
-            {companyName && <div style={{ fontSize: 10, color: C.textDim, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 3 }}>{companyName}</div>}
+            {companyName && <div style={{ fontSize: 10, color: "#ffffff", fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 3 }}>{companyName}</div>}
           </div>
 
           {/* Tabs */}
@@ -510,7 +518,7 @@ export default function Dashboard({ token }) {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnel} layout="vertical" margin={{ left: 10, right: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} /><XAxis type="number" tick={{ fill: C.textDim, fontSize: 10 }} axisLine={{ stroke: C.border }} /><YAxis type="category" dataKey="etapa" width={170} tick={{ fill: C.text, fontSize: 11, fontWeight: 600 }} axisLine={{ stroke: C.border }} />
-                  <Tooltip content={<CTooltip />} /><Bar dataKey="total" radius={[0, 6, 6, 0]} name="Cards">{funnel.map((_, i) => <Cell key={i} fill={C.funnelPalette[i % C.funnelPalette.length]} />)}</Bar>
+                  <Tooltip content={<CTooltip />} /><Bar dataKey="total" radius={[0, 6, 6, 0]} name="Cards">{funnel.map((f, i) => <Cell key={i} fill={getFunnelColor(f.etapa, i)} />)}</Bar>
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -519,7 +527,7 @@ export default function Dashboard({ token }) {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnel}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} /><XAxis dataKey="etapa" tick={{ fill: C.textDim, fontSize: 9 }} axisLine={{ stroke: C.border }} angle={-20} textAnchor="end" height={65} /><YAxis tick={{ fill: C.textDim, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
-                  <Tooltip content={<CTooltip isCurrency />} /><Bar dataKey="valor" radius={[6, 6, 0, 0]} name="Valor">{funnel.map((_, i) => <Cell key={i} fill={C.funnelPalette[i % C.funnelPalette.length]} />)}</Bar>
+                  <Tooltip content={<CTooltip isCurrency />} /><Bar dataKey="valor" radius={[6, 6, 0, 0]} name="Valor">{funnel.map((f, i) => <Cell key={i} fill={getFunnelColor(f.etapa, i)} />)}</Bar>
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
