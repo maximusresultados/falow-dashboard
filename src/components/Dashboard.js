@@ -148,7 +148,7 @@ function GlossaryModal({ glossary, onClose }) {
               borderBottom: i < glossary.items.length - 1 ? `1px solid ${C.border}40` : "none",
             }}>
               <div style={{
-                fontSize: 13, fontWeight: 700, color: C.brand, marginBottom: 5,
+                fontSize: 15, fontWeight: 700, color: C.brand, marginBottom: 5,
                 display: "flex", alignItems: "center", gap: 8,
               }}>
                 <span style={{
@@ -157,7 +157,7 @@ function GlossaryModal({ glossary, onClose }) {
                 }} />
                 {item.term}
               </div>
-              <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6, paddingLeft: 14 }}>
+              <div style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.7, paddingLeft: 14 }}>
                 {item.desc}
               </div>
             </div>
@@ -177,11 +177,11 @@ function GlossaryButton({ onClick }) {
       onMouseLeave={() => setH(false)}
       style={{
         position: "fixed", bottom: 24, right: 24, zIndex: 1000,
-        width: 44, height: 44, borderRadius: 12,
+        width: 56, height: 56, borderRadius: 14,
         border: `1px solid ${h ? C.borderLight : C.border}`,
         background: h ? C.cardHover : C.card,
-        color: h ? C.brand : C.textMuted,
-        fontSize: 18, cursor: "pointer",
+        color: "#ffffff",
+        fontSize: 26, fontWeight: 800, cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "center",
         boxShadow: h ? `0 8px 24px ${C.brandGlow}` : "0 4px 12px #0004",
         transition: "all 0.25s ease",
@@ -299,6 +299,34 @@ function PanelSelect({ panels, selected, onChange }) {
   );
 }
 
+function PeriodSelect({ selected, onChange }) {
+  return (
+    <select
+      value={selected || ""}
+      onChange={e => onChange(e.target.value || null)}
+      style={{
+        padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.border}`,
+        background: C.card, color: C.text, fontSize: 12, fontWeight: 600,
+        cursor: "pointer", outline: "none", minWidth: 150,
+        appearance: "none",
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8baa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "right 10px center",
+        paddingRight: 32,
+      }}
+    >
+      <option value="" style={{ background: C.card }}>📅 Todo período</option>
+      <option value="7" style={{ background: C.card }}>Últimos 7 dias</option>
+      <option value="15" style={{ background: C.card }}>Últimos 15 dias</option>
+      <option value="30" style={{ background: C.card }}>Últimos 30 dias</option>
+      <option value="60" style={{ background: C.card }}>Últimos 60 dias</option>
+      <option value="90" style={{ background: C.card }}>Últimos 90 dias</option>
+      <option value="180" style={{ background: C.card }}>Últimos 6 meses</option>
+      <option value="365" style={{ background: C.card }}>Último ano</option>
+    </select>
+  );
+}
+
 function CTooltip({ active, payload, label, isCurrency }) {
   if (!active || !payload?.length) return null;
   return (
@@ -328,6 +356,7 @@ export default function Dashboard({ token }) {
   const [panels, setPanels] = useState([]);
   const [selectedPanel, setSelectedPanel] = useState(null);
   const [showGlossary, setShowGlossary] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState(null);
 
   // Fetch panels list (once)
   useEffect(() => {
@@ -343,13 +372,14 @@ export default function Dashboard({ token }) {
     setLoading(true);
     const errs = [];
     const panel = selectedPanel;
+    const period = selectedPeriod;
 
     const [kpiRaw, funnelRaw, evoRaw, rankRaw, overdueRaw] = await Promise.all([
-      rpc("dashboard_kpis", token, panel),
-      rpc("dashboard_funnel", token, panel),
-      rpc("dashboard_evolution", token, panel),
-      rpc("dashboard_ranking", token, panel),
-      rpc("dashboard_overdue", token, panel),
+      rpc("dashboard_kpis", token, panel, period),
+      rpc("dashboard_funnel", token, panel, period),
+      rpc("dashboard_evolution", token, panel, period),
+      rpc("dashboard_ranking", token, panel, period),
+      rpc("dashboard_overdue", token, panel, period),
     ]);
 
     // KPIs
@@ -384,7 +414,7 @@ export default function Dashboard({ token }) {
     setErrors(errs);
     setLastSync(new Date());
     setLoading(false);
-  }, [token, selectedPanel]);
+  }, [token, selectedPanel, selectedPeriod]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { const id = setInterval(fetchData, 5 * 60 * 1000); return () => clearInterval(id); }, [fetchData]);
@@ -456,6 +486,7 @@ export default function Dashboard({ token }) {
           {/* Controls */}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <PanelSelect panels={panels} selected={selectedPanel} onChange={setSelectedPanel} />
+            <PeriodSelect selected={selectedPeriod} onChange={setSelectedPeriod} />
             {errors.length > 0 && <span style={{ fontSize: 10, color: C.amber }}>⚠️ {errors.join(", ")}</span>}
             <button onClick={fetchData} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", background: "transparent", color: C.textMuted, fontSize: 11, fontWeight: 600, opacity: loading ? 0.5 : 1 }}>{loading ? "⏳" : "🔄"}</button>
             {lastSync && <div style={{ fontSize: 10, color: C.textDim }}>{lastSync.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>}
@@ -490,7 +521,7 @@ export default function Dashboard({ token }) {
                       <linearGradient id="gC" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.brand} stopOpacity={0.3} /><stop offset="100%" stopColor={C.brand} stopOpacity={0} /></linearGradient>
                       <linearGradient id="gG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.green} stopOpacity={0.3} /><stop offset="100%" stopColor={C.green} stopOpacity={0} /></linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} /><XAxis dataKey="mes" tick={{ fill: C.textDim, fontSize: 10 }} axisLine={{ stroke: C.border }} /><YAxis tick={{ fill: C.textDim, fontSize: 10 }} axisLine={{ stroke: C.border }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} /><XAxis dataKey="mes" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} /><YAxis tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} />
                     <Tooltip content={<CTooltip />} />
                     <Area type="monotone" dataKey="criados" stroke={C.brand} strokeWidth={2} fill="url(#gC)" name="Criados" />
                     <Area type="monotone" dataKey="ganhos" stroke={C.green} strokeWidth={2} fill="url(#gG)" name="Ganhos" />
@@ -517,7 +548,7 @@ export default function Dashboard({ token }) {
             <ChartCard title="Cards por Etapa" height={Math.max(250, funnel.length * 45)}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnel} layout="vertical" margin={{ left: 10, right: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} /><XAxis type="number" tick={{ fill: C.textDim, fontSize: 10 }} axisLine={{ stroke: C.border }} /><YAxis type="category" dataKey="etapa" width={170} tick={{ fill: C.text, fontSize: 11, fontWeight: 600 }} axisLine={{ stroke: C.border }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} /><XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} /><YAxis type="category" dataKey="etapa" width={180} tick={{ fill: "#ffffff", fontSize: 13, fontWeight: 600 }} axisLine={{ stroke: C.border }} />
                   <Tooltip content={<CTooltip />} /><Bar dataKey="total" radius={[0, 6, 6, 0]} name="Cards">{funnel.map((f, i) => <Cell key={i} fill={getFunnelColor(f.etapa, i)} />)}</Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -526,7 +557,7 @@ export default function Dashboard({ token }) {
             <ChartCard title="Valor por Etapa (R$)" height={280}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnel}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} /><XAxis dataKey="etapa" tick={{ fill: C.textDim, fontSize: 9 }} axisLine={{ stroke: C.border }} angle={-20} textAnchor="end" height={65} /><YAxis tick={{ fill: C.textDim, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} /><XAxis dataKey="etapa" tick={{ fill: "#ffffff", fontSize: 12, fontWeight: 600 }} axisLine={{ stroke: C.border }} angle={-20} textAnchor="end" height={70} /><YAxis tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
                   <Tooltip content={<CTooltip isCurrency />} /><Bar dataKey="valor" radius={[6, 6, 0, 0]} name="Valor">{funnel.map((f, i) => <Cell key={i} fill={getFunnelColor(f.etapa, i)} />)}</Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -555,14 +586,14 @@ export default function Dashboard({ token }) {
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>{r.responsavel}</div>
                   <div style={{ fontSize: 22, fontWeight: 800, color: C.green, fontFamily: NUM_FONT }}>{formatBRL(r.receita)}</div>
-                  <div style={{ fontSize: 11, color: C.textDim, marginTop: 8 }}>{r.ganhos} ganhos · {r.perdidos} perdidos · {r.total} total</div>
+                  <div style={{ fontSize: 11, color: "#ffffff", marginTop: 8 }}>{r.ganhos} ganhos · {r.perdidos} perdidos · {r.total} total</div>
                 </div>
               ))}
             </div>
             <ChartCard title="Receita por Responsável" height={Math.max(180, ranking.length * 40)}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={ranking} layout="vertical" margin={{ left: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} /><XAxis type="number" tick={{ fill: C.textDim, fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} /><YAxis type="category" dataKey="responsavel" width={130} tick={{ fill: C.text, fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} /><XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} /><YAxis type="category" dataKey="responsavel" width={130} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
                   <Tooltip content={<CTooltip isCurrency />} /><Bar dataKey="receita" radius={[0, 6, 6, 0]} fill={C.green} name="Receita" />
                 </BarChart>
               </ResponsiveContainer>

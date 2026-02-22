@@ -1,10 +1,11 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export async function rpc(fnName, dashboardToken, panel = null) {
+export async function rpc(fnName, dashboardToken, panel = null, period = null) {
   const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`;
   const body = { p_token: dashboardToken };
   if (panel) body.p_panel = panel;
+  if (period) body.p_period = period;
 
   try {
     const res = await fetch(url, {
