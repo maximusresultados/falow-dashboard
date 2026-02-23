@@ -269,7 +269,7 @@ function DataTable({ columns, data, emptyMsg = "Sem dados" }) {
 
 function TabBtn({ active, onClick, children }) {
   return <button onClick={onClick} style={{
-    padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, transition: "all 0.2s",
+    padding: "10px 22px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, transition: "all 0.2s",
     background: active ? `linear-gradient(135deg, ${C.brand}, ${C.brandDark})` : "transparent",
     color: active ? "#fff" : C.textMuted, boxShadow: active ? `0 4px 16px ${C.brandGlow}` : "none",
   }}>{children}</button>;
@@ -471,7 +471,7 @@ export default function Dashboard({ token }) {
         <div style={{ maxWidth: 1440, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           {/* Logo */}
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <img src={LOGO_URL} alt="FalowCRM" style={{ height: 42, display: "block" }} />
+            <img src={LOGO_URL} alt="FalowCRM" style={{ height: 52, display: "block" }} />
             {companyName && <div style={{ fontSize: 10, color: "#ffffff", fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", marginTop: 3 }}>{companyName}</div>}
           </div>
 
