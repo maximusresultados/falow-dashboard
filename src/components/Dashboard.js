@@ -299,34 +299,6 @@ function PanelSelect({ panels, selected, onChange }) {
   );
 }
 
-function PeriodSelect({ selected, onChange }) {
-  return (
-    <select
-      value={selected || ""}
-      onChange={e => onChange(e.target.value || null)}
-      style={{
-        padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.border}`,
-        background: C.card, color: C.text, fontSize: 12, fontWeight: 600,
-        cursor: "pointer", outline: "none", minWidth: 150,
-        appearance: "none",
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8baa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "right 10px center",
-        paddingRight: 32,
-      }}
-    >
-      <option value="" style={{ background: C.card }}>📅 Todo período</option>
-      <option value="7" style={{ background: C.card }}>Últimos 7 dias</option>
-      <option value="15" style={{ background: C.card }}>Últimos 15 dias</option>
-      <option value="30" style={{ background: C.card }}>Últimos 30 dias</option>
-      <option value="60" style={{ background: C.card }}>Últimos 60 dias</option>
-      <option value="90" style={{ background: C.card }}>Últimos 90 dias</option>
-      <option value="180" style={{ background: C.card }}>Últimos 6 meses</option>
-      <option value="365" style={{ background: C.card }}>Último ano</option>
-    </select>
-  );
-}
-
 function CTooltip({ active, payload, label, isCurrency }) {
   if (!active || !payload?.length) return null;
   return (
@@ -356,7 +328,6 @@ export default function Dashboard({ token }) {
   const [panels, setPanels] = useState([]);
   const [selectedPanel, setSelectedPanel] = useState(null);
   const [showGlossary, setShowGlossary] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState(null);
 
   // Fetch panels list (once)
   useEffect(() => {
@@ -372,14 +343,13 @@ export default function Dashboard({ token }) {
     setLoading(true);
     const errs = [];
     const panel = selectedPanel;
-    const period = selectedPeriod;
 
     const [kpiRaw, funnelRaw, evoRaw, rankRaw, overdueRaw] = await Promise.all([
-      rpc("dashboard_kpis", token, panel, period),
-      rpc("dashboard_funnel", token, panel, period),
-      rpc("dashboard_evolution", token, panel, period),
-      rpc("dashboard_ranking", token, panel, period),
-      rpc("dashboard_overdue", token, panel, period),
+      rpc("dashboard_kpis", token, panel),
+      rpc("dashboard_funnel", token, panel),
+      rpc("dashboard_evolution", token, panel),
+      rpc("dashboard_ranking", token, panel),
+      rpc("dashboard_overdue", token, panel),
     ]);
 
     // KPIs
@@ -414,7 +384,7 @@ export default function Dashboard({ token }) {
     setErrors(errs);
     setLastSync(new Date());
     setLoading(false);
-  }, [token, selectedPanel, selectedPeriod]);
+  }, [token, selectedPanel]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { const id = setInterval(fetchData, 5 * 60 * 1000); return () => clearInterval(id); }, [fetchData]);
@@ -486,7 +456,6 @@ export default function Dashboard({ token }) {
           {/* Controls */}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <PanelSelect panels={panels} selected={selectedPanel} onChange={setSelectedPanel} />
-            <PeriodSelect selected={selectedPeriod} onChange={setSelectedPeriod} />
             {errors.length > 0 && <span style={{ fontSize: 10, color: C.amber }}>⚠️ {errors.join(", ")}</span>}
             <button onClick={fetchData} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", background: "transparent", color: C.textMuted, fontSize: 11, fontWeight: 600, opacity: loading ? 0.5 : 1 }}>{loading ? "⏳" : "🔄"}</button>
             {lastSync && <div style={{ fontSize: 10, color: C.textDim }}>{lastSync.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>}
