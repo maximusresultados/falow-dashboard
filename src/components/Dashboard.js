@@ -107,6 +107,18 @@ const GLOSSARY = {
       { term: "Dias de Atraso (tabela)", desc: "Na tabela detalhada, mostra há quantos dias cada card está atrasado. Vermelho (>7 dias) indica situação crítica, amarelo (≤7 dias) indica atenção." },
     ],
   },
+  etiquetas: {
+    title: "Glossário — Etiquetas",
+    items: [
+      { term: "Etiqueta", desc: "Tag atribuída ao card/contato para categorizá-lo. Um card pode ter múltiplas etiquetas ao mesmo tempo." },
+      { term: "Total Cards", desc: "Quantidade de cards que possuem aquela etiqueta, independente do status (ativo, ganho ou perdido)." },
+      { term: "Ganhos", desc: "Cards com aquela etiqueta que chegaram a etapas de vitória (Vendido, Faturado). Indica quais etiquetas estão associadas a negócios bem-sucedidos." },
+      { term: "Perdidos", desc: "Cards com aquela etiqueta que chegaram a etapas de perda. Ajuda a identificar padrões de etiquetas em negócios perdidos." },
+      { term: "Em Pipeline", desc: "Cards com aquela etiqueta que ainda estão em etapas ativas. São as oportunidades em andamento com essa categoria." },
+      { term: "Receita", desc: "Soma do valor monetário dos cards ganhos que possuem aquela etiqueta. Mostra quais categorias de clientes geram mais faturamento." },
+      { term: "Conversão", desc: "Percentual de cards finalizados com aquela etiqueta que foram ganhos. Indica a eficiência de conversão por categoria." },
+    ],
+  },
 };
 
 function GlossaryModal({ glossary, onClose }) {
@@ -323,6 +335,7 @@ export default function Dashboard({ token }) {
   const [evolution, setEvolution] = useState(null);
   const [ranking, setRanking] = useState(null);
   const [overdue, setOverdue] = useState(null);
+  const [etiquetas, setEtiquetas] = useState(null);
   const [companyName, setCompanyName] = useState("");
   const [invalidToken, setInvalidToken] = useState(false);
   const [panels, setPanels] = useState([]);
@@ -344,12 +357,13 @@ export default function Dashboard({ token }) {
     const errs = [];
     const panel = selectedPanel;
 
-    const [kpiRaw, funnelRaw, evoRaw, rankRaw, overdueRaw] = await Promise.all([
+    const [kpiRaw, funnelRaw, evoRaw, rankRaw, overdueRaw, etiquetasRaw] = await Promise.all([
       rpc("dashboard_kpis", token, panel),
       rpc("dashboard_funnel", token, panel),
       rpc("dashboard_evolution", token, panel),
       rpc("dashboard_ranking", token, panel),
       rpc("dashboard_overdue", token, panel),
+      rpc("dashboard_etiquetas", token, panel),
     ]);
 
     // KPIs
@@ -380,6 +394,10 @@ export default function Dashboard({ token }) {
     const o = parseRpcResponse(overdueRaw, "dashboard_overdue");
     if (Array.isArray(o)) setOverdue(o.map(i => ({ codigo: i.codigo || "—", titulo: i.titulo || "—", responsavel: i.responsavel || "—", etapa: i.etapa || "—", valor: parseFloat(i.valor) || 0, dias: parseInt(i.dias) || 0 })));
     else setOverdue([]);
+
+    const et = parseRpcResponse(etiquetasRaw, "dashboard_etiquetas");
+    if (Array.isArray(et)) setEtiquetas(et.map(i => ({ etiqueta: i.etiqueta || "—", cor: i.cor || C.brand, total_cards: parseInt(i.total_cards) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, em_pipeline: parseInt(i.em_pipeline) || 0, receita: parseFloat(i.receita) || 0, taxa_conversao: i.taxa_conversao != null ? parseFloat(i.taxa_conversao) : null })));
+    else setEtiquetas([]);
 
     setErrors(errs);
     setLastSync(new Date());
@@ -451,6 +469,7 @@ export default function Dashboard({ token }) {
             <TabBtn active={tab === "funnel"} onClick={() => setTab("funnel")}>🔻 Funil</TabBtn>
             <TabBtn active={tab === "team"} onClick={() => setTab("team")}>👥 Equipe</TabBtn>
             <TabBtn active={tab === "alerts"} onClick={() => setTab("alerts")}>🚨 Alertas</TabBtn>
+            <TabBtn active={tab === "etiquetas"} onClick={() => setTab("etiquetas")}>🏷️ Etiquetas</TabBtn>
           </div>
 
           {/* Controls */}
@@ -601,6 +620,77 @@ export default function Dashboard({ token }) {
               <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
               <div style={{ fontSize: 16, fontWeight: 700, color: C.green }}>Nenhum card atrasado!</div>
               <div style={{ fontSize: 12, color: C.textDim, marginTop: 6 }}>Todos os cards estão dentro do prazo.</div>
+            </div>
+          )}
+        </>)}
+
+        {/* ETIQUETAS */}
+        {tab === "etiquetas" && (<>
+          <SectionHeader icon="🏷️" subtitle="Performance por etiqueta de contato">Etiquetas</SectionHeader>
+          {etiquetas?.length > 0 ? (<>
+            {/* KPI Cards */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14 }}>
+              <KPICard label="Total Etiquetas" value={formatNum(etiquetas.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
+              <KPICard label="Total Cards" value={formatNum(etiquetas.reduce((s, e) => s + e.total_cards, 0))} icon="📋" color={C.cyan} />
+              <KPICard label="Receita Total" value={formatBRL(etiquetas.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
+              <KPICard label="Melhor Conversão" value={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best ? `${best.taxa_conversao}%` : "—"; })()} icon="📈" color={C.green} glow={C.greenGlow} subtitle={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best?.etiqueta || ""; })()} />
+              <KPICard label="Maior Receita" value={formatBRL(Math.max(...etiquetas.map(e => e.receita)))} icon="💰" color={C.amber} glow={C.amberGlow} subtitle={etiquetas.sort((a, b) => b.receita - a.receita)[0]?.etiqueta || ""} />
+            </div>
+
+            {/* Gráficos */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
+              <ChartCard title="Cards por Etiqueta" height={Math.max(250, etiquetas.length * 38)}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                    <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} />
+                    <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                    <Tooltip content={<CTooltip />} />
+                    <Bar dataKey="total_cards" radius={[0, 6, 6, 0]} name="Cards">
+                      {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+              <ChartCard title="Receita por Etiqueta (R$)" height={Math.max(250, etiquetas.length * 38)}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                    <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
+                    <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                    <Tooltip content={<CTooltip isCurrency />} />
+                    <Bar dataKey="receita" radius={[0, 6, 6, 0]} name="Receita">
+                      {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            {/* Tabela */}
+            <div style={{ marginTop: 14, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>Detalhamento por Etiqueta</div>
+              <DataTable
+                columns={[
+                  { key: "etiqueta", label: "Etiqueta", bold: true, render: r => (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: r.cor, flexShrink: 0, display: "inline-block" }} />
+                      {r.etiqueta}
+                    </div>
+                  )},
+                  { key: "total_cards", label: "Cards", align: "center" },
+                  { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
+                  { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
+                  { key: "em_pipeline", label: "Pipeline", align: "center", color: () => C.brand },
+                  { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
+                  { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
+                ]}
+                data={etiquetas}
+              />
+            </div>
+          </>) : (
+            <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
+              {etiquetas === null ? "Carregando..." : "Nenhuma etiqueta encontrada"}
             </div>
           )}
         </>)}
