@@ -31,6 +31,71 @@ function formatNum(v) {
 }
 
 // ══════════════════════════════════════════════
+// WTS API HELPERS
+// ══════════════════════════════════════════════
+
+async function fetchWtsTags(apiToken) {
+  try {
+    const res = await fetch("https://api.wts.chat/core/v1/tag", {
+      headers: { "Authorization": `Bearer ${apiToken}`, "Content-Type": "application/json" },
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
+}
+
+async function fetchContactsByTag(apiToken, tagId) {
+  const all = [];
+  let page = 1;
+  let hasMore = true;
+  while (hasMore) {
+    try {
+      const res = await fetch("https://api.wts.chat/core/v1/contact/filter", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${apiToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ tagIds: [tagId], pageSize: 100, pageNumber: page, status: "ACTIVE" }),
+      });
+      if (!res.ok) break;
+      const data = await res.json();
+      all.push(...(data.items || []));
+      hasMore = data.hasMorePages || false;
+      page++;
+    } catch { break; }
+  }
+  return all;
+}
+
+async function buildContactTagsData(apiToken, contactStatsMap) {
+  const tags = await fetchWtsTags(apiToken);
+  if (!tags.length) return [];
+  const results = await Promise.all(tags.map(async tag => {
+    const contacts = await fetchContactsByTag(apiToken, tag.id);
+    const active = contacts.filter(c => contactStatsMap[c.id]);
+    if (!active.length) return null;
+    const m = active.reduce((acc, c) => {
+      const s = contactStatsMap[c.id];
+      acc.contatos++;
+      acc.active_cards += s.active_cards || 0;
+      acc.valor_pipeline += s.valor_pipeline || 0;
+      acc.ganhos += s.ganhos || 0;
+      acc.perdidos += s.perdidos || 0;
+      acc.receita += s.receita || 0;
+      return acc;
+    }, { contatos: 0, active_cards: 0, valor_pipeline: 0, ganhos: 0, perdidos: 0, receita: 0 });
+    const fin = m.ganhos + m.perdidos;
+    return {
+      id: tag.id,
+      etiqueta: tag.name || "—",
+      cor: tag.bgColor || C.brand,
+      textColor: tag.textColor,
+      ...m,
+      taxa_conversao: fin > 0 ? Math.round(m.ganhos / fin * 100) : null,
+    };
+  }));
+  return results.filter(Boolean).sort((a, b) => b.valor_pipeline - a.valor_pipeline);
+}
+
+// ══════════════════════════════════════════════
 // DESIGN TOKENS
 // ══════════════════════════════════════════════
 
@@ -108,7 +173,7 @@ const GLOSSARY = {
     ],
   },
   etiquetas: {
-    title: "Glossário — Etiquetas",
+    title: "Glossário — Etiquetas de Cards",
     items: [
       { term: "Etiqueta", desc: "Tag atribuída ao card/contato para categorizá-lo. Um card pode ter múltiplas etiquetas ao mesmo tempo." },
       { term: "Total Cards", desc: "Quantidade de cards que possuem aquela etiqueta, independente do status (ativo, ganho ou perdido)." },
@@ -117,6 +182,19 @@ const GLOSSARY = {
       { term: "Em Pipeline", desc: "Cards com aquela etiqueta que ainda estão em etapas ativas. São as oportunidades em andamento com essa categoria." },
       { term: "Receita", desc: "Soma do valor monetário dos cards ganhos que possuem aquela etiqueta. Mostra quais categorias de clientes geram mais faturamento." },
       { term: "Conversão", desc: "Percentual de cards finalizados com aquela etiqueta que foram ganhos. Indica a eficiência de conversão por categoria." },
+    ],
+  },
+  etiquetas_contatos: {
+    title: "Glossário — Etiquetas de Contatos",
+    items: [
+      { term: "Etiqueta", desc: "Tag atribuída ao contato no CRM. Um contato pode ter múltiplas etiquetas simultaneamente." },
+      { term: "Contatos", desc: "Quantidade de contatos com essa etiqueta que possuem pelo menos um card ativo no pipeline. Contatos sem cards ativos são excluídos desta visão." },
+      { term: "Cards Ativos", desc: "Total de cards ativos no pipeline vinculados aos contatos com essa etiqueta. Indica o volume de oportunidades em andamento para esse perfil de contato." },
+      { term: "Valor Pipeline", desc: "Soma do valor monetário de todos os cards ativos dos contatos com essa etiqueta. Representa o potencial de receita em negociação para esse segmento." },
+      { term: "Ganhos", desc: "Total de cards ganhos (Vendido, Faturado) dos contatos com essa etiqueta. Indica quantas vendas foram concretizadas nesse segmento." },
+      { term: "Perdidos", desc: "Total de cards perdidos dos contatos com essa etiqueta. Ajuda a identificar segmentos com maior dificuldade de conversão." },
+      { term: "Receita", desc: "Soma do valor faturado (etapa Faturado no Sistema) dos contatos com essa etiqueta. Representa o faturamento real gerado por esse perfil de contato." },
+      { term: "Conversão", desc: "Percentual de cards finalizados que foram ganhos, considerando os contatos com essa etiqueta. Indica a eficiência comercial por segmento de contato." },
     ],
   },
 };
@@ -336,6 +414,11 @@ export default function Dashboard({ token }) {
   const [ranking, setRanking] = useState(null);
   const [overdue, setOverdue] = useState(null);
   const [etiquetas, setEtiquetas] = useState(null);
+  const [etiquetasView, setEtiquetasView] = useState("cards");
+  const [etiquetasContatos, setEtiquetasContatos] = useState(null);
+  const [etiquetasContatosLoading, setEtiquetasContatosLoading] = useState(false);
+  const [wtsApiToken, setWtsApiToken] = useState(null);
+  const [wtsContactStats, setWtsContactStats] = useState(null);
   const [companyName, setCompanyName] = useState("");
   const [invalidToken, setInvalidToken] = useState(false);
   const [panels, setPanels] = useState([]);
@@ -357,13 +440,14 @@ export default function Dashboard({ token }) {
     const errs = [];
     const panel = selectedPanel;
 
-    const [kpiRaw, funnelRaw, evoRaw, rankRaw, overdueRaw, etiquetasRaw] = await Promise.all([
+    const [kpiRaw, funnelRaw, evoRaw, rankRaw, overdueRaw, etiquetasRaw, wtsRaw] = await Promise.all([
       rpc("dashboard_kpis", token, panel),
       rpc("dashboard_funnel", token, panel),
       rpc("dashboard_evolution", token, panel),
       rpc("dashboard_ranking", token, panel),
       rpc("dashboard_overdue", token, panel),
       rpc("dashboard_etiquetas", token, panel),
+      rpc("dashboard_wts_credentials", token),
     ]);
 
     // KPIs
@@ -399,6 +483,18 @@ export default function Dashboard({ token }) {
     if (Array.isArray(et)) setEtiquetas(et.map(i => ({ etiqueta: i.etiqueta || "—", cor: i.cor || C.brand, total_cards: parseInt(i.total_cards) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, em_pipeline: parseInt(i.em_pipeline) || 0, receita: parseFloat(i.receita) || 0, taxa_conversao: i.taxa_conversao != null ? parseFloat(i.taxa_conversao) : null })));
     else setEtiquetas([]);
 
+    // WTS credentials + contact stats map
+    const wts = parseRpcResponse(wtsRaw, "dashboard_wts_credentials");
+    if (wts && wts.api_token) {
+      setWtsApiToken(wts.api_token);
+      const statsMap = {};
+      if (Array.isArray(wts.contact_stats)) {
+        wts.contact_stats.forEach(s => { statsMap[s.contact_id] = s; });
+      }
+      setWtsContactStats(statsMap);
+      setEtiquetasContatos(null); // invalida cache para recarregar com dados frescos
+    }
+
     setErrors(errs);
     setLastSync(new Date());
     setLoading(false);
@@ -406,6 +502,17 @@ export default function Dashboard({ token }) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { const id = setInterval(fetchData, 5 * 60 * 1000); return () => clearInterval(id); }, [fetchData]);
+
+  // Carrega etiquetas de contatos via WTS API (lazy, apenas quando a view for aberta)
+  useEffect(() => {
+    if (etiquetasView !== "contatos") return;
+    if (etiquetasContatos !== null || etiquetasContatosLoading) return;
+    if (!wtsApiToken || !wtsContactStats) return;
+    setEtiquetasContatosLoading(true);
+    buildContactTagsData(wtsApiToken, wtsContactStats)
+      .then(data => { setEtiquetasContatos(data); setEtiquetasContatosLoading(false); })
+      .catch(() => { setEtiquetasContatos([]); setEtiquetasContatosLoading(false); });
+  }, [etiquetasView, etiquetasContatos, etiquetasContatosLoading, wtsApiToken, wtsContactStats]);
 
   const pieData = useMemo(() => {
     if (!kpis) return [];
@@ -626,78 +733,176 @@ export default function Dashboard({ token }) {
 
         {/* ETIQUETAS */}
         {tab === "etiquetas" && (<>
-          <SectionHeader icon="🏷️" subtitle="Performance por etiqueta de contato">Etiquetas</SectionHeader>
-          {etiquetas?.length > 0 ? (<>
-            {/* KPI Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14 }}>
-              <KPICard label="Total Etiquetas" value={formatNum(etiquetas.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
-              <KPICard label="Total Cards" value={formatNum(etiquetas.reduce((s, e) => s + e.total_cards, 0))} icon="📋" color={C.cyan} />
-              <KPICard label="Receita Total" value={formatBRL(etiquetas.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
-              <KPICard label="Melhor Conversão" value={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best ? `${best.taxa_conversao}%` : "—"; })()} icon="📈" color={C.green} glow={C.greenGlow} subtitle={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best?.etiqueta || ""; })()} />
-              <KPICard label="Maior Receita" value={formatBRL(Math.max(...etiquetas.map(e => e.receita)))} icon="💰" color={C.amber} glow={C.amberGlow} subtitle={etiquetas.sort((a, b) => b.receita - a.receita)[0]?.etiqueta || ""} />
-            </div>
+          <SectionHeader icon="🏷️" subtitle="Performance por etiqueta">Etiquetas</SectionHeader>
 
-            {/* Gráficos */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
-              <ChartCard title="Cards por Etiqueta" height={Math.max(250, etiquetas.length * 38)}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                    <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} />
-                    <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
-                    <Tooltip content={<CTooltip />} />
-                    <Bar dataKey="total_cards" radius={[0, 6, 6, 0]} name="Cards">
-                      {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-              <ChartCard title="Receita por Etiqueta (R$)" height={Math.max(250, etiquetas.length * 38)}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
-                    <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
-                    <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
-                    <Tooltip content={<CTooltip isCurrency />} />
-                    <Bar dataKey="receita" radius={[0, 6, 6, 0]} name="Receita">
-                      {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
+          {/* TOGGLE CARDS / CONTATOS */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            {[
+              { key: "cards", label: "🏷️ Etiquetas de Cards" },
+              { key: "contatos", label: "👤 Etiquetas de Contatos" },
+            ].map(v => (
+              <button key={v.key} onClick={() => setEtiquetasView(v.key)} style={{
+                padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                border: `1px solid ${etiquetasView === v.key ? C.brand : C.border}`,
+                background: etiquetasView === v.key ? C.brandGlow : "transparent",
+                color: etiquetasView === v.key ? C.brand : C.textMuted,
+                transition: "all 0.2s",
+              }}>{v.label}</button>
+            ))}
+          </div>
 
-            {/* Tabela */}
-            <div style={{ marginTop: 14, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>Detalhamento por Etiqueta</div>
-              <DataTable
-                columns={[
-                  { key: "etiqueta", label: "Etiqueta", bold: true, render: r => (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: r.cor, flexShrink: 0, display: "inline-block" }} />
-                      {r.etiqueta}
-                    </div>
-                  )},
-                  { key: "total_cards", label: "Cards", align: "center" },
-                  { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
-                  { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
-                  { key: "em_pipeline", label: "Pipeline", align: "center", color: () => C.brand },
-                  { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
-                  { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
-                ]}
-                data={etiquetas}
-              />
-            </div>
-          </>) : (
-            <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
-              {etiquetas === null ? "Carregando..." : "Nenhuma etiqueta encontrada"}
-            </div>
-          )}
+          {/* VIEW: ETIQUETAS DE CARDS */}
+          {etiquetasView === "cards" && (<>
+            {etiquetas?.length > 0 ? (<>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14 }}>
+                <KPICard label="Total Etiquetas" value={formatNum(etiquetas.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
+                <KPICard label="Total Cards" value={formatNum(etiquetas.reduce((s, e) => s + e.total_cards, 0))} icon="📋" color={C.cyan} />
+                <KPICard label="Receita Total" value={formatBRL(etiquetas.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
+                <KPICard label="Melhor Conversão" value={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best ? `${best.taxa_conversao}%` : "—"; })()} icon="📈" color={C.green} glow={C.greenGlow} subtitle={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best?.etiqueta || ""; })()} />
+                <KPICard label="Maior Receita" value={formatBRL(Math.max(...etiquetas.map(e => e.receita)))} icon="💰" color={C.amber} glow={C.amberGlow} subtitle={etiquetas.sort((a, b) => b.receita - a.receita)[0]?.etiqueta || ""} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
+                <ChartCard title="Cards por Etiqueta" height={Math.max(250, etiquetas.length * 38)}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                      <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} />
+                      <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                      <Tooltip content={<CTooltip />} />
+                      <Bar dataKey="total_cards" radius={[0, 6, 6, 0]} name="Cards">
+                        {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+                <ChartCard title="Receita por Etiqueta (R$)" height={Math.max(250, etiquetas.length * 38)}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                      <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
+                      <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                      <Tooltip content={<CTooltip isCurrency />} />
+                      <Bar dataKey="receita" radius={[0, 6, 6, 0]} name="Receita">
+                        {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              </div>
+              <div style={{ marginTop: 14, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>Detalhamento por Etiqueta</div>
+                <DataTable
+                  columns={[
+                    { key: "etiqueta", label: "Etiqueta", bold: true, render: r => (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: r.cor, flexShrink: 0, display: "inline-block" }} />
+                        {r.etiqueta}
+                      </div>
+                    )},
+                    { key: "total_cards", label: "Cards", align: "center" },
+                    { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
+                    { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
+                    { key: "em_pipeline", label: "Pipeline", align: "center", color: () => C.brand },
+                    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
+                    { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
+                  ]}
+                  data={etiquetas}
+                />
+              </div>
+            </>) : (
+              <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
+                {etiquetas === null ? "Carregando..." : "Nenhuma etiqueta encontrada"}
+              </div>
+            )}
+          </>)}
+
+          {/* VIEW: ETIQUETAS DE CONTATOS */}
+          {etiquetasView === "contatos" && (<>
+            {etiquetasContatosLoading && (
+              <div style={{ padding: 40, textAlign: "center", color: C.textMuted, fontSize: 14 }}>
+                Buscando etiquetas de contatos...
+              </div>
+            )}
+            {!etiquetasContatosLoading && etiquetasContatos?.length > 0 && (<>
+              {/* Refresh button */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+                <button onClick={() => setEtiquetasContatos(null)} style={{
+                  padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted,
+                }}>↺ Atualizar</button>
+              </div>
+
+              {/* KPIs */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14 }}>
+                <KPICard label="Total Etiquetas" value={formatNum(etiquetasContatos.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
+                <KPICard label="Contatos Ativos" value={formatNum(etiquetasContatos.reduce((s, e) => s + e.contatos, 0))} icon="👤" color={C.cyan} />
+                <KPICard label="Valor Pipeline" value={formatBRL(etiquetasContatos.reduce((s, e) => s + e.valor_pipeline, 0))} icon="💼" color={C.purple} />
+                <KPICard label="Receita Total" value={formatBRL(etiquetasContatos.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
+                <KPICard label="Maior Pipeline" value={formatBRL(Math.max(...etiquetasContatos.map(e => e.valor_pipeline)))} icon="📊" color={C.amber} glow={C.amberGlow} subtitle={etiquetasContatos[0]?.etiqueta || ""} />
+              </div>
+
+              {/* Gráficos */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
+                <ChartCard title="Contatos com Cards Ativos por Etiqueta" height={Math.max(250, etiquetasContatos.length * 38)}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={etiquetasContatos} layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                      <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} />
+                      <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                      <Tooltip content={<CTooltip />} />
+                      <Bar dataKey="contatos" radius={[0, 6, 6, 0]} name="Contatos">
+                        {etiquetasContatos.map((e, i) => <Cell key={i} fill={e.cor || C.funnelPalette[i % C.funnelPalette.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+                <ChartCard title="Valor Pipeline por Etiqueta (R$)" height={Math.max(250, etiquetasContatos.length * 38)}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={etiquetasContatos} layout="vertical" margin={{ left: 10, right: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                      <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
+                      <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
+                      <Tooltip content={<CTooltip isCurrency />} />
+                      <Bar dataKey="valor_pipeline" radius={[0, 6, 6, 0]} name="Pipeline">
+                        {etiquetasContatos.map((e, i) => <Cell key={i} fill={e.cor || C.funnelPalette[i % C.funnelPalette.length]} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              </div>
+
+              {/* Tabela */}
+              <div style={{ marginTop: 14, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>Detalhamento por Etiqueta de Contato</div>
+                <DataTable
+                  columns={[
+                    { key: "etiqueta", label: "Etiqueta", bold: true, render: r => (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: r.cor || C.brand, flexShrink: 0, display: "inline-block" }} />
+                        {r.etiqueta}
+                      </div>
+                    )},
+                    { key: "contatos", label: "Contatos", align: "center", color: () => C.cyan },
+                    { key: "active_cards", label: "Cards Ativos", align: "center" },
+                    { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
+                    { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
+                    { key: "valor_pipeline", label: "Pipeline", align: "right", mono: true, render: r => formatBRL(r.valor_pipeline) },
+                    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
+                    { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
+                  ]}
+                  data={etiquetasContatos}
+                />
+              </div>
+            </>)}
+            {!etiquetasContatosLoading && etiquetasContatos !== null && etiquetasContatos.length === 0 && (
+              <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>Nenhuma etiqueta de contato encontrada</div>
+            )}
+          </>)}
         </>)}
 
         {/* GLOSSARY */}
         <GlossaryButton onClick={() => setShowGlossary(true)} />
-        {showGlossary && <GlossaryModal glossary={GLOSSARY[tab]} onClose={() => setShowGlossary(false)} />}
+        {showGlossary && <GlossaryModal glossary={tab === "etiquetas" && etiquetasView === "contatos" ? GLOSSARY.etiquetas_contatos : GLOSSARY[tab]} onClose={() => setShowGlossary(false)} />}
 
         {/* FOOTER */}
         <div style={{ marginTop: 60, paddingTop: 16, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
