@@ -368,25 +368,61 @@ function TabBtn({ active, onClick, children }) {
   }}>{children}</button>;
 }
 
-function EtiquetaSelect({ items, selected, onChange }) {
+function EtiquetaMultiSelect({ items, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const all = (items || []).map(i => i.etiqueta);
+  const isAll = selected === null;
+  const count = isAll ? all.length : (selected || []).length;
+  const isChecked = name => isAll || (selected || []).includes(name);
+
+  const toggle = name => {
+    if (isAll) {
+      onChange(all.filter(n => n !== name));
+    } else {
+      const next = isChecked(name) ? selected.filter(n => n !== name) : [...selected, name];
+      onChange(next.length === all.length ? null : next);
+    }
+  };
+
   return (
-    <select
-      value={selected || ""}
-      onChange={e => onChange(e.target.value || "")}
-      style={{
-        padding: "7px 14px", borderRadius: 8, border: `1px solid ${selected ? C.brand : C.border}`,
-        background: C.card, color: selected ? C.brand : C.text, fontSize: 12, fontWeight: 600,
-        cursor: "pointer", outline: "none", minWidth: 200,
-        appearance: "none",
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8baa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-        backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", paddingRight: 32,
-      }}
-    >
-      <option value="" style={{ background: C.card, color: C.text }}>🏷️ Todas as etiquetas</option>
-      {(items || []).map(item => (
-        <option key={item.etiqueta} value={item.etiqueta} style={{ background: C.card, color: C.text }}>{item.etiqueta}</option>
-      ))}
-    </select>
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        padding: "7px 14px", borderRadius: 8, cursor: "pointer", outline: "none",
+        border: `1px solid ${isAll ? C.border : C.brand}`,
+        background: isAll ? C.card : C.brandGlow,
+        color: isAll ? C.text : C.brand,
+        fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, minWidth: 210,
+      }}>
+        <span>🏷️ {isAll ? `Todas (${all.length})` : `${count} de ${all.length} selecionadas`}</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, opacity: 0.7 }}>▾</span>
+      </button>
+
+      {open && <>
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 100,
+          background: C.card, border: `1px solid ${C.borderLight}`, borderRadius: 12,
+          padding: "10px 0", minWidth: 240, maxHeight: 320, overflowY: "auto",
+          boxShadow: "0 16px 48px #000d",
+        }}>
+          <div style={{ display: "flex", gap: 12, padding: "0 12px 8px", borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
+            <button onClick={() => onChange(null)} style={{ fontSize: 11, color: C.brand, background: "none", border: "none", cursor: "pointer", fontWeight: 700, padding: 0 }}>Selecionar todas</button>
+            <button onClick={() => onChange([])} style={{ fontSize: 11, color: C.textMuted, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Limpar</button>
+          </div>
+          {(items || []).map(item => (
+            <label key={item.etiqueta} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", cursor: "pointer" }}
+              onMouseEnter={e => e.currentTarget.style.background = C.cardHover}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <input type="checkbox" checked={isChecked(item.etiqueta)} onChange={() => toggle(item.etiqueta)}
+                style={{ accentColor: item.cor || C.brand, width: 14, height: 14, cursor: "pointer" }} />
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: item.cor || C.brand, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: C.text }}>{item.etiqueta}</span>
+            </label>
+          ))}
+        </div>
+      </>}
+    </div>
   );
 }
 
@@ -440,7 +476,8 @@ export default function Dashboard({ token }) {
   const [overdue, setOverdue] = useState(null);
   const [etiquetas, setEtiquetas] = useState(null);
   const [etiquetasView, setEtiquetasView] = useState("cards");
-  const [etiquetasFilter, setEtiquetasFilter] = useState("");
+  const [etiquetasCardsSelected, setEtiquetasCardsSelected] = useState(null);
+  const [etiquetasContatosSelected, setEtiquetasContatosSelected] = useState(null);
   const [etiquetasContatos, setEtiquetasContatos] = useState(null);
   const [etiquetasContatosLoading, setEtiquetasContatosLoading] = useState(false);
   const [wtsApiToken, setWtsApiToken] = useState(null);
@@ -536,21 +573,21 @@ export default function Dashboard({ token }) {
     if (!wtsApiToken || !wtsContactStats) return;
     setEtiquetasContatosLoading(true);
     buildContactTagsData(wtsApiToken, wtsContactStats)
-      .then(data => { setEtiquetasContatos(data); setEtiquetasContatosLoading(false); })
+      .then(data => { setEtiquetasContatos(data); setEtiquetasContatosSelected(null); setEtiquetasContatosLoading(false); })
       .catch(() => { setEtiquetasContatos([]); setEtiquetasContatosLoading(false); });
   }, [etiquetasView, etiquetasContatos, etiquetasContatosLoading, wtsApiToken, wtsContactStats]);
 
   const etiquetasFilt = useMemo(() => {
     if (!etiquetas) return etiquetas;
-    if (!etiquetasFilter) return etiquetas;
-    return etiquetas.filter(e => e.etiqueta === etiquetasFilter);
-  }, [etiquetas, etiquetasFilter]);
+    if (etiquetasCardsSelected === null) return etiquetas;
+    return etiquetas.filter(e => etiquetasCardsSelected.includes(e.etiqueta));
+  }, [etiquetas, etiquetasCardsSelected]);
 
   const etiquetasContatosFilt = useMemo(() => {
     if (!etiquetasContatos) return etiquetasContatos;
-    if (!etiquetasFilter) return etiquetasContatos;
-    return etiquetasContatos.filter(e => e.etiqueta === etiquetasFilter);
-  }, [etiquetasContatos, etiquetasFilter]);
+    if (etiquetasContatosSelected === null) return etiquetasContatos;
+    return etiquetasContatos.filter(e => etiquetasContatosSelected.includes(e.etiqueta));
+  }, [etiquetasContatos, etiquetasContatosSelected]);
 
   const pieData = useMemo(() => {
     if (!kpis) return [];
@@ -779,7 +816,7 @@ export default function Dashboard({ token }) {
               { key: "cards", label: "🏷️ Etiquetas de Cards" },
               { key: "contatos", label: "👤 Etiquetas de Contatos" },
             ].map(v => (
-              <button key={v.key} onClick={() => { setEtiquetasView(v.key); setEtiquetasFilter(""); }} style={{
+              <button key={v.key} onClick={() => { setEtiquetasView(v.key); setEtiquetasCardsSelected(null); setEtiquetasContatosSelected(null); }} style={{
                 padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
                 border: `1px solid ${etiquetasView === v.key ? C.brand : C.border}`,
                 background: etiquetasView === v.key ? C.brandGlow : "transparent",
@@ -788,10 +825,10 @@ export default function Dashboard({ token }) {
               }}>{v.label}</button>
             ))}
             <div style={{ marginLeft: "auto" }}>
-              <EtiquetaSelect
+              <EtiquetaMultiSelect
                 items={etiquetasView === "cards" ? etiquetas : etiquetasContatos}
-                selected={etiquetasFilter}
-                onChange={setEtiquetasFilter}
+                selected={etiquetasView === "cards" ? etiquetasCardsSelected : etiquetasContatosSelected}
+                onChange={etiquetasView === "cards" ? setEtiquetasCardsSelected : setEtiquetasContatosSelected}
               />
             </div>
           </div>
@@ -856,7 +893,7 @@ export default function Dashboard({ token }) {
               </div>
             </>) : (
               <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
-                {etiquetas === null ? "Carregando..." : etiquetasFilter ? `Nenhum resultado para "${etiquetasFilter}"` : "Nenhuma etiqueta encontrada"}
+                {etiquetas === null ? "Carregando..." : etiquetasCardsSelected?.length === 0 ? "Nenhuma etiqueta selecionada" : "Nenhuma etiqueta encontrada"}
               </div>
             )}
           </>)}
@@ -941,7 +978,7 @@ export default function Dashboard({ token }) {
             </>)}
             {!etiquetasContatosLoading && etiquetasContatos !== null && !etiquetasContatosFilt?.length && (
               <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
-                {etiquetasFilter ? `Nenhum resultado para "${etiquetasFilter}"` : "Nenhuma etiqueta de contato encontrada"}
+                {etiquetasContatosSelected?.length === 0 ? "Nenhuma etiqueta selecionada" : "Nenhuma etiqueta de contato encontrada"}
               </div>
             )}
           </>)}
