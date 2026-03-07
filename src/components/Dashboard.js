@@ -418,6 +418,7 @@ export default function Dashboard({ token }) {
   const [overdue, setOverdue] = useState(null);
   const [etiquetas, setEtiquetas] = useState(null);
   const [etiquetasView, setEtiquetasView] = useState("cards");
+  const [etiquetasFilter, setEtiquetasFilter] = useState("");
   const [etiquetasContatos, setEtiquetasContatos] = useState(null);
   const [etiquetasContatosLoading, setEtiquetasContatosLoading] = useState(false);
   const [wtsApiToken, setWtsApiToken] = useState(null);
@@ -516,6 +517,18 @@ export default function Dashboard({ token }) {
       .then(data => { setEtiquetasContatos(data); setEtiquetasContatosLoading(false); })
       .catch(() => { setEtiquetasContatos([]); setEtiquetasContatosLoading(false); });
   }, [etiquetasView, etiquetasContatos, etiquetasContatosLoading, wtsApiToken, wtsContactStats]);
+
+  const etiquetasFilt = useMemo(() => {
+    if (!etiquetas) return etiquetas;
+    if (!etiquetasFilter.trim()) return etiquetas;
+    return etiquetas.filter(e => e.etiqueta.toLowerCase().includes(etiquetasFilter.toLowerCase()));
+  }, [etiquetas, etiquetasFilter]);
+
+  const etiquetasContatosFilt = useMemo(() => {
+    if (!etiquetasContatos) return etiquetasContatos;
+    if (!etiquetasFilter.trim()) return etiquetasContatos;
+    return etiquetasContatos.filter(e => e.etiqueta.toLowerCase().includes(etiquetasFilter.toLowerCase()));
+  }, [etiquetasContatos, etiquetasFilter]);
 
   const pieData = useMemo(() => {
     if (!kpis) return [];
@@ -738,13 +751,13 @@ export default function Dashboard({ token }) {
         {tab === "etiquetas" && (<>
           <SectionHeader icon="🏷️" subtitle="Performance por etiqueta">Etiquetas</SectionHeader>
 
-          {/* TOGGLE CARDS / CONTATOS */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          {/* TOGGLE CARDS / CONTATOS + FILTRO */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
             {[
               { key: "cards", label: "🏷️ Etiquetas de Cards" },
               { key: "contatos", label: "👤 Etiquetas de Contatos" },
             ].map(v => (
-              <button key={v.key} onClick={() => setEtiquetasView(v.key)} style={{
+              <button key={v.key} onClick={() => { setEtiquetasView(v.key); setEtiquetasFilter(""); }} style={{
                 padding: "8px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
                 border: `1px solid ${etiquetasView === v.key ? C.brand : C.border}`,
                 background: etiquetasView === v.key ? C.brandGlow : "transparent",
@@ -752,41 +765,56 @@ export default function Dashboard({ token }) {
                 transition: "all 0.2s",
               }}>{v.label}</button>
             ))}
+            <div style={{ marginLeft: "auto", position: "relative" }}>
+              <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textDim, fontSize: 13, pointerEvents: "none" }}>🔍</span>
+              <input
+                type="text"
+                placeholder="Filtrar etiqueta..."
+                value={etiquetasFilter}
+                onChange={e => setEtiquetasFilter(e.target.value)}
+                style={{
+                  paddingLeft: 32, paddingRight: 12, paddingTop: 8, paddingBottom: 8,
+                  borderRadius: 8, border: `1px solid ${etiquetasFilter ? C.brand : C.border}`,
+                  background: C.card, color: C.text, fontSize: 13, outline: "none", width: 200,
+                  transition: "border-color 0.2s",
+                }}
+              />
+            </div>
           </div>
 
           {/* VIEW: ETIQUETAS DE CARDS */}
           {etiquetasView === "cards" && (<>
-            {etiquetas?.length > 0 ? (<>
+            {etiquetasFilt?.length > 0 ? (<>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14 }}>
-                <KPICard label="Total Etiquetas" value={formatNum(etiquetas.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
-                <KPICard label="Total Cards" value={formatNum(etiquetas.reduce((s, e) => s + e.total_cards, 0))} icon="📋" color={C.cyan} />
-                <KPICard label="Receita Total" value={formatBRL(etiquetas.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
-                <KPICard label="Melhor Conversão" value={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best ? `${best.taxa_conversao}%` : "—"; })()} icon="📈" color={C.green} glow={C.greenGlow} subtitle={(() => { const best = etiquetas.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best?.etiqueta || ""; })()} />
-                <KPICard label="Maior Receita" value={formatBRL(Math.max(...etiquetas.map(e => e.receita)))} icon="💰" color={C.amber} glow={C.amberGlow} subtitle={etiquetas.sort((a, b) => b.receita - a.receita)[0]?.etiqueta || ""} />
+                <KPICard label="Total Etiquetas" value={formatNum(etiquetasFilt.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
+                <KPICard label="Total Cards" value={formatNum(etiquetasFilt.reduce((s, e) => s + e.total_cards, 0))} icon="📋" color={C.cyan} />
+                <KPICard label="Receita Total" value={formatBRL(etiquetasFilt.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
+                <KPICard label="Melhor Conversão" value={(() => { const best = etiquetasFilt.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best ? `${best.taxa_conversao}%` : "—"; })()} icon="📈" color={C.green} glow={C.greenGlow} subtitle={(() => { const best = etiquetasFilt.filter(e => e.taxa_conversao != null).sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0]; return best?.etiqueta || ""; })()} />
+                <KPICard label="Maior Receita" value={formatBRL(Math.max(...etiquetasFilt.map(e => e.receita)))} icon="💰" color={C.amber} glow={C.amberGlow} subtitle={[...etiquetasFilt].sort((a, b) => b.receita - a.receita)[0]?.etiqueta || ""} />
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
-                <ChartCard title="Cards por Etiqueta" height={Math.max(250, etiquetas.length * 38)}>
+                <ChartCard title="Cards por Etiqueta" height={Math.max(250, etiquetasFilt.length * 38)}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <BarChart data={etiquetasFilt} layout="vertical" margin={{ left: 10, right: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
                       <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} />
                       <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
                       <Tooltip content={<CTooltip />} />
                       <Bar dataKey="total_cards" radius={[0, 6, 6, 0]} name="Cards">
-                        {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
+                        {etiquetasFilt.map((e, i) => <Cell key={i} fill={e.cor} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartCard>
-                <ChartCard title="Receita por Etiqueta (R$)" height={Math.max(250, etiquetas.length * 38)}>
+                <ChartCard title="Receita por Etiqueta (R$)" height={Math.max(250, etiquetasFilt.length * 38)}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={etiquetas} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <BarChart data={etiquetasFilt} layout="vertical" margin={{ left: 10, right: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
                       <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
                       <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
                       <Tooltip content={<CTooltip isCurrency />} />
                       <Bar dataKey="receita" radius={[0, 6, 6, 0]} name="Receita">
-                        {etiquetas.map((e, i) => <Cell key={i} fill={e.cor} />)}
+                        {etiquetasFilt.map((e, i) => <Cell key={i} fill={e.cor} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -809,12 +837,12 @@ export default function Dashboard({ token }) {
                     { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
                     { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
                   ]}
-                  data={etiquetas}
+                  data={etiquetasFilt}
                 />
               </div>
             </>) : (
               <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
-                {etiquetas === null ? "Carregando..." : "Nenhuma etiqueta encontrada"}
+                {etiquetas === null ? "Carregando..." : etiquetasFilter ? `Nenhum resultado para "${etiquetasFilter}"` : "Nenhuma etiqueta encontrada"}
               </div>
             )}
           </>)}
@@ -826,7 +854,7 @@ export default function Dashboard({ token }) {
                 Buscando etiquetas de contatos...
               </div>
             )}
-            {!etiquetasContatosLoading && etiquetasContatos?.length > 0 && (<>
+            {!etiquetasContatosLoading && etiquetasContatosFilt?.length > 0 && (<>
               {/* Refresh button */}
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
                 <button onClick={() => setEtiquetasContatos(null)} style={{
@@ -837,37 +865,37 @@ export default function Dashboard({ token }) {
 
               {/* KPIs */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14 }}>
-                <KPICard label="Total Etiquetas" value={formatNum(etiquetasContatos.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
-                <KPICard label="Contatos Ativos" value={formatNum(etiquetasContatos.reduce((s, e) => s + e.contatos, 0))} icon="👤" color={C.cyan} />
-                <KPICard label="Valor Pipeline" value={formatBRL(etiquetasContatos.reduce((s, e) => s + e.valor_pipeline, 0))} icon="💼" color={C.purple} />
-                <KPICard label="Receita Total" value={formatBRL(etiquetasContatos.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
-                <KPICard label="Maior Pipeline" value={formatBRL(Math.max(...etiquetasContatos.map(e => e.valor_pipeline)))} icon="📊" color={C.amber} glow={C.amberGlow} subtitle={etiquetasContatos[0]?.etiqueta || ""} />
+                <KPICard label="Total Etiquetas" value={formatNum(etiquetasContatosFilt.length)} icon="🏷️" color={C.brand} glow={C.brandGlow} />
+                <KPICard label="Contatos Ativos" value={formatNum(etiquetasContatosFilt.reduce((s, e) => s + e.contatos, 0))} icon="👤" color={C.cyan} />
+                <KPICard label="Valor Pipeline" value={formatBRL(etiquetasContatosFilt.reduce((s, e) => s + e.valor_pipeline, 0))} icon="💼" color={C.purple} />
+                <KPICard label="Receita Total" value={formatBRL(etiquetasContatosFilt.reduce((s, e) => s + e.receita, 0))} icon="🏆" color={C.emerald} />
+                <KPICard label="Maior Pipeline" value={formatBRL(Math.max(...etiquetasContatosFilt.map(e => e.valor_pipeline)))} icon="📊" color={C.amber} glow={C.amberGlow} subtitle={etiquetasContatosFilt[0]?.etiqueta || ""} />
               </div>
 
               {/* Gráficos */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
-                <ChartCard title="Contatos com Cards Ativos por Etiqueta" height={Math.max(250, etiquetasContatos.length * 38)}>
+                <ChartCard title="Contatos com Cards Ativos por Etiqueta" height={Math.max(250, etiquetasContatosFilt.length * 38)}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={etiquetasContatos} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <BarChart data={etiquetasContatosFilt} layout="vertical" margin={{ left: 10, right: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
                       <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} />
                       <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
                       <Tooltip content={<CTooltip />} />
                       <Bar dataKey="contatos" radius={[0, 6, 6, 0]} name="Contatos">
-                        {etiquetasContatos.map((e, i) => <Cell key={i} fill={e.cor || C.funnelPalette[i % C.funnelPalette.length]} />)}
+                        {etiquetasContatosFilt.map((e, i) => <Cell key={i} fill={e.cor || C.funnelPalette[i % C.funnelPalette.length]} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartCard>
-                <ChartCard title="Valor Pipeline por Etiqueta (R$)" height={Math.max(250, etiquetasContatos.length * 38)}>
+                <ChartCard title="Valor Pipeline por Etiqueta (R$)" height={Math.max(250, etiquetasContatosFilt.length * 38)}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={etiquetasContatos} layout="vertical" margin={{ left: 10, right: 20 }}>
+                    <BarChart data={etiquetasContatosFilt} layout="vertical" margin={{ left: 10, right: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
                       <XAxis type="number" tick={{ fill: "#ffffff", fontSize: 10 }} axisLine={{ stroke: C.border }} tickFormatter={v => formatBRL(v)} />
                       <YAxis type="category" dataKey="etiqueta" width={160} tick={{ fill: "#ffffff", fontSize: 11 }} axisLine={{ stroke: C.border }} />
                       <Tooltip content={<CTooltip isCurrency />} />
                       <Bar dataKey="valor_pipeline" radius={[0, 6, 6, 0]} name="Pipeline">
-                        {etiquetasContatos.map((e, i) => <Cell key={i} fill={e.cor || C.funnelPalette[i % C.funnelPalette.length]} />)}
+                        {etiquetasContatosFilt.map((e, i) => <Cell key={i} fill={e.cor || C.funnelPalette[i % C.funnelPalette.length]} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -893,12 +921,14 @@ export default function Dashboard({ token }) {
                     { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
                     { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
                   ]}
-                  data={etiquetasContatos}
+                  data={etiquetasContatosFilt}
                 />
               </div>
             </>)}
-            {!etiquetasContatosLoading && etiquetasContatos !== null && etiquetasContatos.length === 0 && (
-              <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>Nenhuma etiqueta de contato encontrada</div>
+            {!etiquetasContatosLoading && etiquetasContatos !== null && !etiquetasContatosFilt?.length && (
+              <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
+                {etiquetasFilter ? `Nenhum resultado para "${etiquetasFilter}"` : "Nenhuma etiqueta de contato encontrada"}
+              </div>
             )}
           </>)}
         </>)}
