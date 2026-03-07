@@ -368,6 +368,28 @@ function TabBtn({ active, onClick, children }) {
   }}>{children}</button>;
 }
 
+function EtiquetaSelect({ items, selected, onChange }) {
+  return (
+    <select
+      value={selected || ""}
+      onChange={e => onChange(e.target.value || "")}
+      style={{
+        padding: "7px 14px", borderRadius: 8, border: `1px solid ${selected ? C.brand : C.border}`,
+        background: C.card, color: selected ? C.brand : C.text, fontSize: 12, fontWeight: 600,
+        cursor: "pointer", outline: "none", minWidth: 200,
+        appearance: "none",
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a8baa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", paddingRight: 32,
+      }}
+    >
+      <option value="" style={{ background: C.card, color: C.text }}>🏷️ Todas as etiquetas</option>
+      {(items || []).map(item => (
+        <option key={item.etiqueta} value={item.etiqueta} style={{ background: C.card, color: C.text }}>{item.etiqueta}</option>
+      ))}
+    </select>
+  );
+}
+
 function PanelSelect({ panels, selected, onChange }) {
   return (
     <select
@@ -520,14 +542,14 @@ export default function Dashboard({ token }) {
 
   const etiquetasFilt = useMemo(() => {
     if (!etiquetas) return etiquetas;
-    if (!etiquetasFilter.trim()) return etiquetas;
-    return etiquetas.filter(e => e.etiqueta.toLowerCase().includes(etiquetasFilter.toLowerCase()));
+    if (!etiquetasFilter) return etiquetas;
+    return etiquetas.filter(e => e.etiqueta === etiquetasFilter);
   }, [etiquetas, etiquetasFilter]);
 
   const etiquetasContatosFilt = useMemo(() => {
     if (!etiquetasContatos) return etiquetasContatos;
-    if (!etiquetasFilter.trim()) return etiquetasContatos;
-    return etiquetasContatos.filter(e => e.etiqueta.toLowerCase().includes(etiquetasFilter.toLowerCase()));
+    if (!etiquetasFilter) return etiquetasContatos;
+    return etiquetasContatos.filter(e => e.etiqueta === etiquetasFilter);
   }, [etiquetasContatos, etiquetasFilter]);
 
   const pieData = useMemo(() => {
@@ -765,19 +787,11 @@ export default function Dashboard({ token }) {
                 transition: "all 0.2s",
               }}>{v.label}</button>
             ))}
-            <div style={{ marginLeft: "auto", position: "relative" }}>
-              <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textDim, fontSize: 13, pointerEvents: "none" }}>🔍</span>
-              <input
-                type="text"
-                placeholder="Filtrar etiqueta..."
-                value={etiquetasFilter}
-                onChange={e => setEtiquetasFilter(e.target.value)}
-                style={{
-                  paddingLeft: 32, paddingRight: 12, paddingTop: 8, paddingBottom: 8,
-                  borderRadius: 8, border: `1px solid ${etiquetasFilter ? C.brand : C.border}`,
-                  background: C.card, color: C.text, fontSize: 13, outline: "none", width: 200,
-                  transition: "border-color 0.2s",
-                }}
+            <div style={{ marginLeft: "auto" }}>
+              <EtiquetaSelect
+                items={etiquetasView === "cards" ? etiquetas : etiquetasContatos}
+                selected={etiquetasFilter}
+                onChange={setEtiquetasFilter}
               />
             </div>
           </div>
