@@ -34,13 +34,20 @@ function formatNum(v) {
 // WTS API HELPERS
 // ══════════════════════════════════════════════
 
+async function wtsProxy(apiToken, path, method = "GET", body = null) {
+  const res = await fetch("/api/wts-proxy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-wts-token": apiToken },
+    body: JSON.stringify({ path, method, body }),
+  });
+  if (!res.ok) throw new Error(`WTS proxy ${res.status}`);
+  return res.json();
+}
+
 async function fetchWtsTags(apiToken) {
   try {
-    const res = await fetch("https://api.wts.chat/core/v1/tag", {
-      headers: { "Authorization": `Bearer ${apiToken}`, "Content-Type": "application/json" },
-    });
-    if (!res.ok) return [];
-    return await res.json();
+    const data = await wtsProxy(apiToken, "tag");
+    return Array.isArray(data) ? data : [];
   } catch { return []; }
 }
 
@@ -50,13 +57,9 @@ async function fetchContactsByTag(apiToken, tagId) {
   let hasMore = true;
   while (hasMore) {
     try {
-      const res = await fetch("https://api.wts.chat/core/v1/contact/filter", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${apiToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ tagIds: [tagId], pageSize: 100, pageNumber: page, status: "ACTIVE" }),
+      const data = await wtsProxy(apiToken, "contact/filter", "POST", {
+        tagIds: [tagId], pageSize: 100, pageNumber: page,
       });
-      if (!res.ok) break;
-      const data = await res.json();
       all.push(...(data.items || []));
       hasMore = data.hasMorePages || false;
       page++;
