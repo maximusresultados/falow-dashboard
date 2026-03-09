@@ -66,6 +66,8 @@ export default function AdminPage() {
   const [newCompany, setNewCompany] = useState(null);
   const [copied, setCopied] = useState("");
 
+  const [deletingId, setDeletingId] = useState(null);
+
   const apiCall = useCallback(async (method, body = null) => {
     const res = await fetch("/api/admin/companies", {
       method,
@@ -117,6 +119,18 @@ export default function AdminPage() {
       setFormError("Erro de conexão");
     }
     setFormLoading(false);
+  };
+
+  const handleDelete = async (co) => {
+    if (!window.confirm(`Deletar "${co.name}"? Esta ação não pode ser desfeita.`)) return;
+    setDeletingId(co.id);
+    try {
+      await apiCall("DELETE", { company_id: co.id });
+      setCompanies(prev => prev.filter(c => c.id !== co.id));
+    } catch {
+      alert("Erro ao deletar empresa");
+    }
+    setDeletingId(null);
   };
 
   const copy = (text, key) => {
@@ -240,6 +254,15 @@ export default function AdminPage() {
                       <div style={{ fontWeight: 700, fontSize: 15, color: C.text }}>{co.name}</div>
                       <div style={{ fontSize: 11, color: C.textDim, background: C.border, padding: "2px 8px", borderRadius: 6, marginLeft: 2 }}>{co.slug}</div>
                       <div style={{ marginLeft: "auto", fontSize: 11, color: C.textDim }}>{co.api_base_url}</div>
+                      <button
+                        onClick={() => handleDelete(co)}
+                        disabled={deletingId === co.id}
+                        style={{
+                          padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          border: `1px solid ${C.red}60`, background: C.redGlow,
+                          color: C.red, transition: "all 0.2s", opacity: deletingId === co.id ? 0.5 : 1,
+                        }}
+                      >{deletingId === co.id ? "..." : "Deletar"}</button>
                     </div>
                     {url && (
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

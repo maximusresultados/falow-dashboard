@@ -10,7 +10,6 @@ async function callRpc(fn, body) {
       "Content-Type": "application/json",
       "apikey": SUPABASE_KEY,
       "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Prefer": "return=representation",
     },
     body: JSON.stringify(body),
   });
@@ -39,6 +38,16 @@ export async function POST(request) {
     p_slug: slug,
     p_api_base_url: api_base_url,
     p_api_token: api_token,
+  });
+  return Response.json(data);
+}
+
+export async function DELETE(request) {
+  if (!auth(request)) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const { company_id } = await request.json();
+  const data = await callRpc("admin_delete_company", {
+    p_rpc_token: ADMIN_RPC_TOKEN,
+    p_company_id: company_id,
   });
   return Response.json(data);
 }
