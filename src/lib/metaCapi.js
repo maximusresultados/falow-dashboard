@@ -1,11 +1,11 @@
-const GRAPH_API_VERSION = "v19.0";
+const GRAPH_API_VERSION = "v25.0";
 const GRAPH_API_BASE    = "https://graph.facebook.com";
 
 // ── Envia evento para a Meta Conversions API ──────────────────────────────────
 // Retorna { ok, events_received, error }
 
 export async function sendToMeta({ pixelId, accessToken, event, testEventCode }) {
-  const url = `${GRAPH_API_BASE}/${GRAPH_API_VERSION}/${pixelId}/events`;
+  const url = metaEventsUrl(pixelId, accessToken);
 
   const body = { data: [event] };
   if (testEventCode) body.test_event_code = testEventCode;
@@ -16,7 +16,6 @@ export async function sendToMeta({ pixelId, accessToken, event, testEventCode })
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify(body),
-      // access_token vai como query param conforme spec da Meta
     });
     responseText = await res.text();
   } catch (err) {

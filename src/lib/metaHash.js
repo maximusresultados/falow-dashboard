@@ -33,6 +33,8 @@ export function buildUserData({
   fbp,
   clientIp,
   clientUserAgent,
+  // whatsapp click-to-whatsapp (sem hash)
+  ctwaClid,
 } = {}) {
   const parts = (name ?? "").trim().split(/\s+/);
   const firstName = parts[0] ?? null;
@@ -48,11 +50,12 @@ export function buildUserData({
   if (country)   userData.country = sha256(country);
   if (zip)       userData.zp      = sha256(String(zip).replace(/\D/g, ""));
 
-  // Campos não hasheados (website)
+  // Campos não hasheados
   if (fbc)             userData.fbc               = fbc;
   if (fbp)             userData.fbp               = fbp;
   if (clientIp)        userData.client_ip_address = clientIp;
   if (clientUserAgent) userData.client_user_agent  = clientUserAgent;
+  if (ctwaClid)        userData.ctwa_clid          = ctwaClid;
 
   return userData;
 }

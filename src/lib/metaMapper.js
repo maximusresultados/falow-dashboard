@@ -41,15 +41,16 @@ function buildWhatsAppEvent(crmBody, contact) {
 
   return {
     event_name:    resolveEventName(crmBody.event),
-    event_time:    unixNow(),
-    action_source: "business_messaging",
+    event_time:    crmBody.event_time ?? unixNow(),
+    action_source: "system_generated",
     user_data:     buildUserData({
-      email:   contact.email,
+      email:    contact.email,
       phone,
-      name:    contact.name ?? contact.nome,
-      city:    contact.city ?? contact.cidade,
-      country: contact.country ?? "br",
-      zip:     contact.zip ?? contact.cep,
+      name:     contact.name ?? contact.nome,
+      city:     contact.city ?? contact.cidade,
+      country:  contact.country ?? "br",
+      zip:      contact.zip ?? contact.cep,
+      ctwaClid: crmBody.ctwa_clid,
     }),
     ...customData(crmBody),
   };
@@ -63,8 +64,8 @@ function buildWhatsAppEvent(crmBody, contact) {
 function buildWebsiteEvent(crmBody, contact) {
   return {
     event_name:       resolveEventName(crmBody.event),
-    event_time:       unixNow(),
-    action_source:    "website",
+    event_time:       crmBody.event_time ?? unixNow(),
+    action_source:    "system_generated",
     event_source_url: crmBody.page_url ?? null,
     user_data:        buildUserData({
       email:           contact.email,
@@ -94,11 +95,13 @@ function unixNow() {
 }
 
 function customData(crmBody) {
-  if (!crmBody.value) return {};
-  return {
-    custom_data: {
-      value:    Number(crmBody.value),
-      currency: crmBody.currency ?? "BRL",
-    },
+  const data = {
+    event_source:       "crm",
+    lead_event_source:  "FalowCRM",
   };
+  if (crmBody.value) {
+    data.value    = Number(crmBody.value);
+    data.currency = crmBody.currency ?? "BRL";
+  }
+  return { custom_data: data };
 }

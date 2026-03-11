@@ -69,10 +69,12 @@ function MetaCapiSection({ company, adminKey }) {
   const [copied, setCopied]   = useState("");
   const [logs, setLogs]       = useState([]);
   const [config, setConfig]   = useState({
-    meta_pixel_id:     "",
-    meta_access_token: "",
-    webhook_secret:    "",
-    capi_sources:      ["website", "whatsapp"],
+    meta_pixel_id:      "",
+    meta_access_token:  "",
+    webhook_secret:     "",
+    capi_sources:       ["website", "whatsapp"],
+    wts_step_orcamento: "",
+    wts_step_venda:     "",
   });
 
   const webhookUrl = typeof window !== "undefined"
@@ -97,10 +99,12 @@ function MetaCapiSection({ company, adminKey }) {
       const data = await res.json();
       if (data.config && !data.config.error) {
         setConfig({
-          meta_pixel_id:     data.config.meta_pixel_id     ?? "",
-          meta_access_token: data.config.meta_access_token ?? "",
-          webhook_secret:    data.config.webhook_secret    ?? "",
-          capi_sources:      data.config.capi_sources      ?? ["website", "whatsapp"],
+          meta_pixel_id:      data.config.meta_pixel_id      ?? "",
+          meta_access_token:  data.config.meta_access_token  ?? "",
+          webhook_secret:     data.config.webhook_secret      ?? "",
+          capi_sources:       data.config.capi_sources        ?? ["website", "whatsapp"],
+          wts_step_orcamento: data.config.wts_step_orcamento  ?? "",
+          wts_step_venda:     data.config.wts_step_venda      ?? "",
         });
       }
       if (Array.isArray(data.logs)) setLogs(data.logs);
@@ -258,6 +262,30 @@ function MetaCapiSection({ company, adminKey }) {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Etapas do funil WTS */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
+                  Etapas do Funil (WTS)
+                </div>
+                <div style={{ fontSize: 11, color: C.textDim, marginBottom: 10 }}>
+                  Digite o título exato da etapa no WTS. Eventos são disparados quando o card muda para essas etapas.
+                </div>
+                <Input
+                  label="Etapa — Envio de Orçamento"
+                  value={config.wts_step_orcamento}
+                  onChange={v => setConfig(c => ({ ...c, wts_step_orcamento: v }))}
+                  placeholder="Ex: ENVIO DE ORÇAMENTO"
+                  hint='Envia evento "Lead" para a Meta'
+                />
+                <Input
+                  label="Etapa — Venda Realizada"
+                  value={config.wts_step_venda}
+                  onChange={v => setConfig(c => ({ ...c, wts_step_venda: v }))}
+                  placeholder="Ex: VENDIDO"
+                  hint='Envia evento "Purchase" para a Meta'
+                />
               </div>
 
               {/* Webhook URL */}

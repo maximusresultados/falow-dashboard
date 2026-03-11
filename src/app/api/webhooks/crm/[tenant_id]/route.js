@@ -1,75 +1,71 @@
-import { verifyHmac }   from "@/lib/metaHash";
 import { mapCrmPayload } from "@/lib/metaMapper";
-import { sendToMeta, metaEventsUrl } from "@/lib/metaCapi";
+import { sendToMeta }    from "@/lib/metaCapi";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const RPC_TOKEN    = process.env.ADMIN_RPC_TOKEN;
 
 // ── POST /api/webhooks/crm/[tenant_id] ───────────────────────────────────────
 export async function POST(request, { params }) {
   const { tenant_id } = params;
 
-  // 1. Lê raw body (necessário para validação HMAC)
   const rawBody = await request.text();
-  let crmPayload;
+  let payload;
   try {
-    crmPayload = JSON.parse(rawBody);
+    payload = JSON.parse(rawBody);
   } catch {
     return Response.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  // 2. Busca config da empresa pelo slug
+  // Normaliza o envelope do WTS (pode vir direto ou wrapped em array)
+  const wtsBody = normalizeWtsPayload(payload);
+  if (!wtsBody) {
+    return Response.json({ error: "unsupported_format" }, { status: 400 });
+  }
+
+  // Só processa mudança de etapa
+  if (wtsBody.eventType !== "PANEL_CARD_STEP_CHANGE") {
+    return Response.json({ received: true, skipped: true }, { status: 200 });
+  }
+
+  // Busca config da empresa pelo slug
   const company = await fetchCompanyBySlug(tenant_id);
   if (!company) {
     return Response.json({ error: "tenant_not_found" }, { status: 404 });
   }
 
-  // 3. Valida assinatura HMAC-SHA256
-  const signature = request.headers.get("x-webhook-signature");
-  if (company.webhook_secret && !verifyHmac(rawBody, company.webhook_secret, signature)) {
-    return Response.json({ error: "invalid_signature" }, { status: 401 });
+  // Verifica se este stepTitle está mapeado para algum evento
+  const stepTitle = wtsBody.content?.stepTitle ?? "";
+  const eventName = resolveStepEvent(stepTitle, company);
+  if (!eventName) {
+    // Etapa não configurada — ignora silenciosamente
+    return Response.json({ received: true, skipped: true }, { status: 200 });
   }
 
-  // 4. Valida source antes de responder
-  const source = (crmPayload.source ?? "website").toLowerCase();
-  const allowedSources = company.capi_sources ?? ["website", "whatsapp"];
-  if (!allowedSources.includes(source)) {
-    return Response.json(
-      { error: "source_not_allowed", allowed: allowedSources },
-      { status: 400 }
-    );
-  }
-
-  // 5. Validação antecipada para WhatsApp (antes do 200)
-  if (source === "whatsapp") {
-    const contact = crmPayload.contact ?? crmPayload.data ?? {};
-    const phone   = contact.phone ?? contact.telefone ?? contact.whatsapp;
-    if (!phone) {
-      return Response.json(
-        { error: "phone_required", message: "Campo phone obrigatório para source=whatsapp" },
-        { status: 400 }
-      );
-    }
-  }
-
-  // 6. Responde 200 imediatamente ao CRM
-  // O processamento continua de forma assíncrona (fire-and-forget)
-  void processEvent({ company, crmPayload, source, tenant_id });
+  // Responde 200 imediatamente; processamento é assíncrono
+  void processWtsEvent({ company, wtsBody, eventName, tenant_id });
 
   return Response.json({ received: true }, { status: 200 });
 }
 
 // ── Processamento assíncrono ──────────────────────────────────────────────────
 
-async function processEvent({ company, crmPayload, source, tenant_id }) {
-  const eventName = crmPayload.event ?? "lead_created";
+async function processWtsEvent({ company, wtsBody, eventName, tenant_id }) {
   let status      = "error";
   let errorDetail = null;
   let metaResp    = null;
 
   try {
-    // Mapeia payload CRM → Meta CAPI
+    const contactId = wtsBody.content?.contacts?.[0]?.id;
+    if (!contactId) throw new Error("contact_id ausente no webhook");
+
+    // Busca dados completos do contato na API WTS
+    const wtsContact = await fetchWtsContact(company, contactId);
+    if (!wtsContact) throw new Error("contato não encontrado na API WTS");
+
+    // Monta payload normalizado para o mapper
+    const crmPayload = buildCrmPayload({ wtsBody, wtsContact, eventName });
+
+    // Mapeia para formato Meta CAPI
     const metaEvent = mapCrmPayload(crmPayload);
 
     // Envia para a Meta
@@ -83,30 +79,105 @@ async function processEvent({ company, crmPayload, source, tenant_id }) {
 
     if (result.ok) {
       status = "success";
-      console.info(`[CAPI][${tenant_id}] ✓ ${metaEvent.event_name} (${source}) → events_received=${result.events_received}`);
+      console.info(`[CAPI][${tenant_id}] ✓ ${eventName} (${stepTitle(wtsBody)}) → events_received=${result.events_received}`);
     } else {
       errorDetail = result.error;
-      console.error(`[CAPI][${tenant_id}] ✗ ${metaEvent.event_name} (${source}) → ${result.error}`);
+      console.error(`[CAPI][${tenant_id}] ✗ ${eventName} → ${result.error}`);
     }
   } catch (err) {
     errorDetail = err.message;
-    console.error(`[CAPI][${tenant_id}] Erro interno: ${err.message}`);
+    console.error(`[CAPI][${tenant_id}] Erro: ${err.message}`);
   }
 
-  // Grava log no Supabase
   await insertLog({
-    companyId:   company.id,
-    tenantId:    tenant_id,
-    source,
+    companyId:    company.id,
+    tenantId:     tenant_id,
+    source:       "wts",
     eventName,
     status,
     errorDetail,
     metaResponse: metaResp,
-    crmPayload:   sanitizePayload(crmPayload),
+    crmPayload:   { step: wtsBody.content?.stepTitle, card: wtsBody.content?.key },
   });
 }
 
-// ── Helpers Supabase ──────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Suporta payload direto { eventType, ... } ou wrapped [{ body: { eventType, ... } }]
+function normalizeWtsPayload(payload) {
+  if (payload?.eventType) return payload;
+  if (Array.isArray(payload) && payload[0]?.body?.eventType) return payload[0].body;
+  return null;
+}
+
+function stepTitle(wtsBody) {
+  return wtsBody.content?.stepTitle ?? "?";
+}
+
+// Compara stepTitle (case-insensitive) com os steps configurados na empresa
+function resolveStepEvent(title, company) {
+  const t = title.trim().toLowerCase();
+  if (company.wts_step_orcamento && t === company.wts_step_orcamento.trim().toLowerCase()) {
+    return "Lead";
+  }
+  if (company.wts_step_venda && t === company.wts_step_venda.trim().toLowerCase()) {
+    return "Purchase";
+  }
+  return null;
+}
+
+// Busca contato completo na API WTS pelo ID
+async function fetchWtsContact(company, contactId) {
+  const baseUrl = (company.api_base_url ?? "https://api.wts.chat").replace(/\/$/, "");
+  try {
+    const res = await fetch(`${baseUrl}/core/v1/contact/${contactId}`, {
+      headers: { "Authorization": `Bearer ${company.api_token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Array.isArray(data) ? data[0] : data;
+  } catch {
+    return null;
+  }
+}
+
+// Converte "+55|62991338898" → "5562991338898"
+function parseWtsPhone(phoneNumber) {
+  if (!phoneNumber) return null;
+  return phoneNumber.replace(/[+|]/g, "");
+}
+
+// Monta o payload no formato esperado pelo metaMapper
+function buildCrmPayload({ wtsBody, wtsContact, eventName }) {
+  const content = wtsBody.content ?? {};
+  const utm     = wtsContact.utm ?? {};
+
+  const payload = {
+    source:     "whatsapp",
+    event:      eventName === "Lead" ? "lead_created" : "deal_won",
+    event_time: wtsBody.date
+      ? Math.floor(new Date(wtsBody.date).getTime() / 1000)
+      : undefined,
+    contact: {
+      email: wtsContact.email    ?? null,
+      phone: parseWtsPhone(wtsContact.phoneNumber),
+      name:  wtsContact.name     ?? wtsContact.nameWhatsapp ?? null,
+    },
+  };
+
+  if (content.monetaryAmount) {
+    payload.value = content.monetaryAmount;
+  }
+
+  // ctwa_clid: presente quando o lead veio de anúncio Click-to-WhatsApp
+  if (utm.clid) {
+    payload.ctwa_clid = utm.clid;
+  }
+
+  return payload;
+}
+
+// ── Supabase helpers ──────────────────────────────────────────────────────────
 
 async function fetchCompanyBySlug(slug) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_company_meta_config`, {
@@ -133,25 +204,14 @@ async function insertLog({ companyId, tenantId, source, eventName, status, error
       "Authorization": `Bearer ${SUPABASE_KEY}`,
     },
     body: JSON.stringify({
-      p_company_id:   companyId,
-      p_tenant_id:    tenantId,
-      p_source:       source,
-      p_event_name:   eventName,
-      p_status:       status,
-      p_error_detail: errorDetail,
+      p_company_id:    companyId,
+      p_tenant_id:     tenantId,
+      p_source:        source,
+      p_event_name:    eventName,
+      p_status:        status,
+      p_error_detail:  errorDetail,
       p_meta_response: metaResponse ? JSON.stringify(metaResponse) : null,
-      p_crm_payload:   crmPayload ? JSON.stringify(crmPayload) : null,
+      p_crm_payload:   crmPayload   ? JSON.stringify(crmPayload)   : null,
     }),
   }).catch(err => console.error(`[CAPI] Falha ao gravar log: ${err.message}`));
-}
-
-// Remove dados sensíveis do payload antes de gravar no log
-function sanitizePayload(payload) {
-  const safe = { ...payload };
-  const contact = safe.contact ? { ...safe.contact } : null;
-  if (contact?.email)    contact.email    = "***";
-  if (contact?.phone)    contact.phone    = "***";
-  if (contact?.telefone) contact.telefone = "***";
-  if (contact) safe.contact = contact;
-  return safe;
 }

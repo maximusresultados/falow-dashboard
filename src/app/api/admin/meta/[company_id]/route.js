@@ -42,15 +42,17 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   if (!auth(request)) return Response.json({ error: "unauthorized" }, { status: 401 });
   const company_id = Number(params.company_id);
-  const { meta_pixel_id, meta_access_token, webhook_secret, capi_sources } = await request.json();
+  const { meta_pixel_id, meta_access_token, webhook_secret, capi_sources, wts_step_orcamento, wts_step_venda } = await request.json();
 
   const data = await callRpc("admin_update_meta_config", {
-    p_rpc_token:      ADMIN_RPC_TOKEN,
-    p_company_id:     company_id,
-    p_pixel_id:       meta_pixel_id,
-    p_access_token:   meta_access_token,
-    p_webhook_secret: webhook_secret,
-    p_sources:        capi_sources ?? ["website", "whatsapp"],
+    p_rpc_token:           ADMIN_RPC_TOKEN,
+    p_company_id:          company_id,
+    p_pixel_id:            meta_pixel_id,
+    p_access_token:        meta_access_token,
+    p_webhook_secret:      webhook_secret,
+    p_sources:             capi_sources ?? ["website", "whatsapp"],
+    p_step_orcamento:      wts_step_orcamento ?? null,
+    p_step_venda:          wts_step_venda     ?? null,
   });
 
   return Response.json(data);
