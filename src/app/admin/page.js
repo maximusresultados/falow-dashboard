@@ -390,6 +390,8 @@ export default function AdminPage() {
   const [newCompany, setNewCompany] = useState(null);
   const [copied, setCopied]         = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [syncingId, setSyncingId]   = useState(null);
+  const [syncResult, setSyncResult] = useState({});
 
   const apiCall = useCallback(async (method, body = null) => {
     const res = await fetch("/api/admin/companies", {
@@ -442,6 +444,27 @@ export default function AdminPage() {
       setFormError("Erro de conexão");
     }
     setFormLoading(false);
+  };
+
+  const handleSync = async (co) => {
+    setSyncingId(co.id);
+    setSyncResult(prev => ({ ...prev, [co.id]: null }));
+    try {
+      const res  = await fetch(`/api/admin/sync/${co.id}`, {
+        method: "POST",
+        headers: { "x-admin-key": adminKey },
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        const s = data.synced;
+        setSyncResult(prev => ({ ...prev, [co.id]: { ok: true, msg: `${s.panels} painéis · ${s.steps} etapas · ${s.cards} cards` } }));
+      } else {
+        setSyncResult(prev => ({ ...prev, [co.id]: { ok: false, msg: data.error ?? "Erro desconhecido" } }));
+      }
+    } catch {
+      setSyncResult(prev => ({ ...prev, [co.id]: { ok: false, msg: "Erro de conexão" } }));
+    }
+    setSyncingId(null);
   };
 
   const handleDelete = async (co) => {
@@ -571,6 +594,16 @@ export default function AdminPage() {
                       <div style={{ fontSize: 11, color: C.textDim, background: C.border, padding: "2px 8px", borderRadius: 6, marginLeft: 2 }}>{co.slug}</div>
                       <div style={{ marginLeft: "auto", fontSize: 11, color: C.textDim }}>{co.api_base_url}</div>
                       <button
+                        onClick={() => handleSync(co)}
+                        disabled={syncingId === co.id}
+                        style={{
+                          padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          border: `1px solid ${C.brand}60`, background: C.brandGlow,
+                          color: C.brand, transition: "all 0.2s", opacity: syncingId === co.id ? 0.6 : 1,
+                          whiteSpace: "nowrap",
+                        }}
+                      >{syncingId === co.id ? "Sincronizando..." : "Sincronizar"}</button>
+                      <button
                         onClick={() => handleDelete(co)}
                         disabled={deletingId === co.id}
                         style={{
@@ -580,6 +613,18 @@ export default function AdminPage() {
                         }}
                       >{deletingId === co.id ? "..." : "Deletar"}</button>
                     </div>
+
+                    {/* Resultado da sincronização */}
+                    {syncResult[co.id] && (
+                      <div style={{
+                        marginTop: 8, padding: "6px 10px", borderRadius: 6, fontSize: 12,
+                        color:       syncResult[co.id].ok ? C.green : C.red,
+                        background:  syncResult[co.id].ok ? C.greenGlow : C.redGlow,
+                        border: `1px solid ${syncResult[co.id].ok ? C.green : C.red}30`,
+                      }}>
+                        {syncResult[co.id].ok ? "✓ Sincronizado: " : "⚠ "}{syncResult[co.id].msg}
+                      </div>
+                    )}
 
                     {/* URL do dashboard */}
                     {url && (
