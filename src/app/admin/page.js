@@ -459,7 +459,8 @@ export default function AdminPage() {
         const s = data.synced;
         setSyncResult(prev => ({ ...prev, [co.id]: { ok: true, msg: `${s.panels} painéis · ${s.steps} etapas · ${s.cards} cards` } }));
       } else {
-        setSyncResult(prev => ({ ...prev, [co.id]: { ok: false, msg: data.error ?? "Erro desconhecido" } }));
+        const msg = [data.error, data.detail].filter(Boolean).join(" — ");
+        setSyncResult(prev => ({ ...prev, [co.id]: { ok: false, msg: msg || "Erro desconhecido" } }));
       }
     } catch {
       setSyncResult(prev => ({ ...prev, [co.id]: { ok: false, msg: "Erro de conexão" } }));

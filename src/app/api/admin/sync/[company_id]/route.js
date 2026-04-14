@@ -53,7 +53,11 @@ async function wts(apiBaseUrl, apiToken, method, path, body) {
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  if (!res.ok) throw new Error(`WTS ${method} ${path}: ${res.status}`);
+  if (!res.ok) {
+    let detail = "";
+    try { detail = await res.text(); } catch {}
+    throw new Error(`WTS ${method} ${path}: HTTP ${res.status} — ${detail.slice(0, 200)}`);
+  }
   return res.json();
 }
 
@@ -166,13 +170,20 @@ export async function POST(request, { params }) {
 
   if (!apiToken) return Response.json({ error: "no_api_token" }, { status: 400 });
 
-  // 2. Busca painéis da WTS
+  // 2. Busca painéis da WTS (tenta "panel" e "pipeline" como fallback)
   let panels;
-  try {
-    const raw = await wts(apiBaseUrl, apiToken, "GET", "panel", null);
-    panels = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? []);
-  } catch (e) {
-    return Response.json({ error: "wts_panels_failed", detail: e.message }, { status: 502 });
+  let panelsError;
+  for (const endpoint of ["panel", "pipeline", "kanban"]) {
+    try {
+      const raw = await wts(apiBaseUrl, apiToken, "GET", endpoint, null);
+      panels = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? raw?.panels ?? raw?.pipelines ?? []);
+      if (panels.length >= 0) break; // endpoint válido
+    } catch (e) {
+      panelsError = e.message;
+    }
+  }
+  if (!panels) {
+    return Response.json({ error: "wts_panels_failed", detail: panelsError }, { status: 502 });
   }
 
   const stats = { panels: 0, steps: 0, tags: 0, cards: 0 };
