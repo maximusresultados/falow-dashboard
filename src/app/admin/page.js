@@ -384,7 +384,7 @@ export default function AdminPage() {
   const [companies, setCompanies]   = useState([]);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [form, setForm]             = useState({ name: "", slug: "", api_base_url: "https://api.wts.chat/", api_token: "" });
+  const [form, setForm]             = useState({ name: "", slug: "", api_base_url: "https://api.wts.chat/", api_token: "", dashboard_token: "" });
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError]   = useState("");
   const [newCompany, setNewCompany] = useState(null);
@@ -434,7 +434,7 @@ export default function AdminPage() {
         setFormError(data.error === "slug_exists" ? "Esse slug já está em uso" : "Erro ao cadastrar empresa");
       } else {
         setNewCompany(data);
-        setForm({ name: "", slug: "", api_base_url: "https://api.wts.chat/", api_token: "" });
+        setForm({ name: "", slug: "", api_base_url: "https://api.wts.chat/", api_token: "", dashboard_token: "" });
         const list = await apiCall("GET");
         if (Array.isArray(list)) setCompanies(list);
       }
@@ -608,6 +608,7 @@ export default function AdminPage() {
           <Input label="Slug" value={form.slug} onChange={setField("slug")} placeholder="Ex: global-quimica" required />
           <Input label="API Token (WTS/FalowCRM)" value={form.api_token} onChange={setField("api_token")} placeholder="pn_xxxxxxxxxxxxx" type="password" required />
           <Input label="API Base URL" value={form.api_base_url} onChange={setField("api_base_url")} placeholder="https://api.wts.chat/" />
+          <Input label="Token de acesso do dashboard" value={form.dashboard_token} onChange={setField("dashboard_token")} placeholder="Deixe em branco para gerar automaticamente" hint="Token usado no link ?token=... do dashboard" />
 
           {formError && (
             <div style={{ fontSize: 12, color: C.red, marginBottom: 12, padding: "8px 10px", background: C.redGlow, borderRadius: 6 }}>⚠ {formError}</div>

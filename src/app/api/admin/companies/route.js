@@ -31,13 +31,14 @@ export async function GET(request) {
 
 export async function POST(request) {
   if (!auth(request)) return Response.json({ error: "unauthorized" }, { status: 401 });
-  const { name, slug, api_base_url, api_token } = await request.json();
+  const { name, slug, api_base_url, api_token, dashboard_token } = await request.json();
   const data = await callRpc("admin_create_company", {
     p_rpc_token: ADMIN_RPC_TOKEN,
     p_name: name,
     p_slug: slug,
     p_api_base_url: api_base_url,
     p_api_token: api_token,
+    p_dashboard_token: dashboard_token || null,
   });
   return Response.json(data);
 }
