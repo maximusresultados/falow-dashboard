@@ -58,6 +58,170 @@ function CopyButton({ text, id, copied, onCopy }) {
   );
 }
 
+// ── Seção Receita por empresa ─────────────────────────────────────────────────
+
+function ReceitaSection({ company, adminKey }) {
+  const [open, setOpen]             = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [saving, setSaving]         = useState(false);
+  const [saved, setSaved]           = useState(false);
+  const [error, setError]           = useState("");
+  const [available, setAvailable]   = useState([]);
+  const [selected, setSelected]     = useState(null); // null = ainda não carregou
+
+  const handleOpen = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (selected !== null) return; // já carregou
+    setLoading(true);
+    setError("");
+    try {
+      const res  = await fetch(`/api/admin/receita/${company.id}`, {
+        headers: { "x-admin-key": adminKey },
+      });
+      const data = await res.json();
+      if (data?.error) {
+        setError("Erro ao carregar etapas");
+      } else {
+        setAvailable(data.available_steps ?? []);
+        setSelected(data.receita_steps ?? ["Faturado (Sistema)"]);
+      }
+    } catch {
+      setError("Erro de conexão");
+    }
+    setLoading(false);
+  };
+
+  const toggle = (title) => {
+    setSelected(prev =>
+      prev.includes(title) ? prev.filter(s => s !== title) : [...prev, title]
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    try {
+      const res  = await fetch(`/api/admin/receita/${company.id}`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        body:    JSON.stringify({ receita_steps: selected }),
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        setError("Erro ao salvar");
+      }
+    } catch {
+      setError("Erro de conexão");
+    }
+    setSaving(false);
+  };
+
+  const isConfigured = company.receita_steps && company.receita_steps.length > 0
+    && !(company.receita_steps.length === 1 && company.receita_steps[0] === "Faturado (Sistema)");
+
+  return (
+    <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+      <button
+        onClick={handleOpen}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "none", border: "none", cursor: "pointer",
+          color: C.amber, fontSize: 12, fontWeight: 700, padding: 0,
+        }}
+      >
+        <span style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 18, height: 18, borderRadius: 4, background: C.amberGlow,
+          fontSize: 10, transition: "transform 0.2s",
+          transform: open ? "rotate(180deg)" : "rotate(0deg)",
+        }}>▼</span>
+        Receita Total
+        {isConfigured && (
+          <span style={{ fontSize: 10, color: C.amber, background: C.amberGlow, padding: "1px 7px", borderRadius: 10 }}>personalizado</span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 14 }}>
+          {loading ? (
+            <div style={{ fontSize: 12, color: C.textDim, padding: "12px 0" }}>Carregando etapas...</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>
+                Selecione as etapas finais que devem somar o valor de <strong style={{ color: C.text }}>Receita Total</strong> no dashboard.
+                Ticket Médio também usa essa configuração.
+              </div>
+
+              {available.length === 0 ? (
+                <div style={{ fontSize: 12, color: C.textDim, padding: "10px 0" }}>
+                  Nenhuma etapa final encontrada. Sincronize a empresa primeiro.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                  {available.map(title => {
+                    const active = selected?.includes(title) ?? false;
+                    return (
+                      <button
+                        key={title}
+                        onClick={() => toggle(title)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          padding: "8px 12px", borderRadius: 8, textAlign: "left",
+                          border: `1px solid ${active ? C.amber + "60" : C.border}`,
+                          background: active ? C.amberGlow : "transparent",
+                          color: active ? C.amber : C.textMuted,
+                          cursor: "pointer", fontSize: 12, fontWeight: active ? 700 : 400,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        <span style={{
+                          width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                          border: `2px solid ${active ? C.amber : C.border}`,
+                          background: active ? C.amber : "transparent",
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 9, color: C.bg,
+                        }}>{active ? "✓" : ""}</span>
+                        {title}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {error && (
+                <div style={{ fontSize: 12, color: C.red, padding: "7px 10px", background: C.redGlow, borderRadius: 6, marginBottom: 10 }}>
+                  ⚠ {error}
+                </div>
+              )}
+              {saved && (
+                <div style={{ fontSize: 12, color: C.green, padding: "7px 10px", background: C.greenGlow, borderRadius: 6, marginBottom: 10 }}>
+                  ✓ Configuração salva
+                </div>
+              )}
+
+              <button
+                onClick={handleSave}
+                disabled={saving || available.length === 0}
+                style={{
+                  width: "100%", padding: "9px", borderRadius: 8, border: "none",
+                  background: C.amber, color: C.bg, fontWeight: 700, fontSize: 13,
+                  cursor: "pointer", opacity: saving || available.length === 0 ? 0.5 : 1,
+                  transition: "opacity 0.2s",
+                }}
+              >{saving ? "Salvando..." : "Salvar"}</button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Seção Meta CAPI por empresa ───────────────────────────────────────────────
 
 function MetaCapiSection({ company, adminKey }) {
@@ -639,6 +803,9 @@ export default function AdminPage() {
 
                     {/* Seção Meta CAPI */}
                     <MetaCapiSection company={co} adminKey={adminKey} />
+
+                    {/* Seção Receita Total */}
+                    <ReceitaSection company={co} adminKey={adminKey} />
                   </div>
                 );
               })}
