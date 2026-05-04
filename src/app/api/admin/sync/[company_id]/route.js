@@ -167,6 +167,9 @@ export async function POST(request, { params }) {
 
   apiToken   = co.api_token;
   apiBaseUrl = co.api_base_url ?? "https://api.wts.chat/";
+  if (apiBaseUrl && !/^https?:\/\//i.test(apiBaseUrl)) {
+    apiBaseUrl = "https://" + apiBaseUrl;
+  }
 
   if (!apiToken) return Response.json({ error: "no_api_token" }, { status: 400 });
 
