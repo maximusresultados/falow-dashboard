@@ -58,6 +58,118 @@ function CopyButton({ text, id, copied, onCopy }) {
   );
 }
 
+// ── Seção Editar empresa ──────────────────────────────────────────────────────
+
+function EditCompanySection({ company, adminKey, onSaved }) {
+  const [open, setOpen]     = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved]   = useState(false);
+  const [error, setError]   = useState("");
+  const [form, setForm]     = useState({
+    name:         company.name         ?? "",
+    slug:         company.slug         ?? "",
+    api_base_url: company.api_base_url ?? "",
+    api_token:    "",
+  });
+
+  const set = key => val => setForm(f => ({ ...f, [key]: val }));
+
+  const handleSave = async () => {
+    if (!form.name || !form.slug) {
+      setError("Nome e slug são obrigatórios");
+      return;
+    }
+    setSaving(true);
+    setSaved(false);
+    setError("");
+    try {
+      const body = {
+        name:         form.name,
+        slug:         form.slug,
+        api_base_url: form.api_base_url || null,
+        api_token:    form.api_token    || null,
+      };
+      const res  = await fetch(`/api/admin/companies/${company.id}`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+        body:    JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+        onSaved({ ...company, ...body, api_token: form.api_token ? form.api_token : company.api_token });
+        setForm(f => ({ ...f, api_token: "" }));
+      } else if (data?.error === "slug_exists") {
+        setError("Esse slug já está em uso por outra empresa");
+      } else {
+        setError("Erro ao salvar");
+      }
+    } catch {
+      setError("Erro de conexão");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "none", border: "none", cursor: "pointer",
+          color: C.textMuted, fontSize: 12, fontWeight: 700, padding: 0,
+        }}
+      >
+        <span style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 18, height: 18, borderRadius: 4, background: C.border,
+          fontSize: 10, transition: "transform 0.2s",
+          transform: open ? "rotate(180deg)" : "rotate(0deg)",
+        }}>▼</span>
+        Editar credenciais
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 14 }}>
+          <Input label="Nome" value={form.name} onChange={set("name")} placeholder="Nome da empresa" required />
+          <Input label="Slug" value={form.slug} onChange={set("slug")} placeholder="slug-da-empresa" required />
+          <Input label="API Base URL" value={form.api_base_url} onChange={set("api_base_url")} placeholder="https://api.wts.chat/" />
+          <Input
+            label="API Token"
+            value={form.api_token}
+            onChange={set("api_token")}
+            placeholder="Deixe em branco para manter o atual"
+            type="password"
+            hint="Preencha apenas se quiser alterar o token atual"
+          />
+
+          {error && (
+            <div style={{ fontSize: 12, color: C.red, padding: "7px 10px", background: C.redGlow, borderRadius: 6, marginBottom: 10 }}>
+              ⚠ {error}
+            </div>
+          )}
+          {saved && (
+            <div style={{ fontSize: 12, color: C.green, padding: "7px 10px", background: C.greenGlow, borderRadius: 6, marginBottom: 10 }}>
+              ✓ Credenciais atualizadas
+            </div>
+          )}
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              width: "100%", padding: "9px", borderRadius: 8, border: "none",
+              background: C.textMuted, color: C.bg, fontWeight: 700, fontSize: 13,
+              cursor: "pointer", opacity: saving ? 0.6 : 1, transition: "opacity 0.2s",
+            }}
+          >{saving ? "Salvando..." : "Salvar"}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Seção Receita por empresa ─────────────────────────────────────────────────
 
 function ReceitaSection({ company, adminKey }) {
@@ -800,6 +912,13 @@ export default function AdminPage() {
                         <CopyButton text={url} id={co.id} copied={copied} onCopy={copy} />
                       </div>
                     )}
+
+                    {/* Editar credenciais */}
+                    <EditCompanySection
+                      company={co}
+                      adminKey={adminKey}
+                      onSaved={updated => setCompanies(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c))}
+                    />
 
                     {/* Seção Meta CAPI */}
                     <MetaCapiSection company={co} adminKey={adminKey} />
