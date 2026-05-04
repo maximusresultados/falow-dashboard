@@ -194,67 +194,36 @@ function mapCard(c, panelInternalId, stepIdMap, companyId) {
 export async function POST(request, { params }) {
   if (!auth(request)) return Response.json({ error: "unauthorized" }, { status: 401 });
 
-  const companyId = parseInt(params.company_id, 10);
-
-  // 1. Busca credenciais da empresa
-  const company = await callRpc("get_company_meta_config", { p_slug: null, p_company_id: companyId });
-  let apiToken, apiBaseUrl;
-
-  // get_company_meta_config pode não aceitar p_company_id; buscar via admin RPC
-  const companies = await callRpc("admin_list_companies", { p_rpc_token: ADMIN_RPC_TOKEN });
-  const co = Array.isArray(companies) ? companies.find(c => c.id === companyId) : null;
-  if (!co) return Response.json({ error: "company_not_found" }, { status: 404 });
-
-  apiToken   = co.api_token;
-  apiBaseUrl = co.api_base_url ?? "https://api.wts.chat/";
-  if (apiBaseUrl && !/^https?:\/\//i.test(apiBaseUrl)) {
-    apiBaseUrl = "https://" + apiBaseUrl;
-  }
-
-  if (!apiToken) return Response.json({ error: "no_api_token" }, { status: 400 });
-
-  // 2. Busca painéis da WTS
-  let panels;
   try {
-    panels = await fetchAllPanels(apiBaseUrl, apiToken);
-  } catch (e) {
-    return Response.json({ error: "wts_panels_failed", detail: e.message }, { status: 502 });
-  }
+    const companyId = parseInt(params.company_id, 10);
 
-  const stats = { panels: 0, steps: 0, tags: 0, cards: 0 };
+    // 1. Busca credenciais da empresa
+    const companies = await callRpc("admin_list_companies", { p_rpc_token: ADMIN_RPC_TOKEN });
+    const co = Array.isArray(companies) ? companies.find(c => c.id === companyId) : null;
+    if (!co) return Response.json({ error: "company_not_found" }, { status: 404 });
 
-  for (const panel of panels) {
-    // 3. Upsert painel e busca id interno
-    await upsertRows("panels", [mapPanel(panel, companyId)], "external_id,company_id");
+    let apiToken   = co.api_token;
+    let apiBaseUrl = co.api_base_url ?? "https://api.wts.chat/";
+    if (!/^https?:\/\//i.test(apiBaseUrl)) apiBaseUrl = "https://" + apiBaseUrl;
 
-    const panelRows = await fetch(
-      `${SUPABASE_URL}/rest/v1/panels?external_id=eq.${panel.id}&company_id=eq.${companyId}&select=id`,
-      {
-        headers: {
-          "apikey": SUPABASE_KEY,
-          "Authorization": `Bearer ${SUPABASE_KEY}`,
-          "Accept-Profile": "crm",
-        },
-      }
-    ).then(r => r.json());
+    if (!apiToken) return Response.json({ error: "no_api_token" }, { status: 400 });
 
-    const panelInternalId = panelRows?.[0]?.id;
-    if (!panelInternalId) continue;
-    stats.panels++;
-
-    // 4. Upsert etapas
-    const steps = panel.steps ?? panel.step ?? [];
-    const stepRows = steps.map(s => mapStep(s, panelInternalId, companyId));
-    if (stepRows.length) {
-      await upsertRows("panel_steps", stepRows, "external_id,company_id");
-      stats.steps += stepRows.length;
+    // 2. Busca painéis da WTS
+    let panels;
+    try {
+      panels = await fetchAllPanels(apiBaseUrl, apiToken);
+    } catch (e) {
+      return Response.json({ error: "wts_panels_failed", detail: e.message }, { status: 502 });
     }
 
-    // Mapa external_id → internal_id das etapas
-    const stepIdMap = {};
-    if (steps.length) {
-      const dbSteps = await fetch(
-        `${SUPABASE_URL}/rest/v1/panel_steps?panel_id=eq.${panelInternalId}&select=id,external_id`,
+    const stats = { panels: 0, steps: 0, tags: 0, cards: 0 };
+
+    for (const panel of panels) {
+      // 3. Upsert painel e busca id interno
+      await upsertRows("panels", [mapPanel(panel, companyId)], "external_id,company_id");
+
+      const panelRows = await fetch(
+        `${SUPABASE_URL}/rest/v1/panels?external_id=eq.${panel.id}&company_id=eq.${companyId}&select=id`,
         {
           headers: {
             "apikey": SUPABASE_KEY,
@@ -263,31 +232,61 @@ export async function POST(request, { params }) {
           },
         }
       ).then(r => r.json());
-      for (const s of (dbSteps ?? [])) stepIdMap[s.external_id] = s.id;
-    }
 
-    // 5. Upsert etiquetas do painel
-    const tags = panel.tags ?? panel.tag ?? [];
-    if (tags.length) {
-      await upsertRows("panel_tags", tags.map(t => mapTag(t, panelInternalId, companyId)), "external_id,company_id");
-      stats.tags += tags.length;
-    }
+      const panelInternalId = panelRows?.[0]?.id;
+      if (!panelInternalId) continue;
+      stats.panels++;
 
-    // 6. Busca e upsert cards (paginado)
-    try {
-      const cards = await fetchAllCards(apiBaseUrl, apiToken, panel.id);
-      const cardRows = cards.map(c => mapCard(c, panelInternalId, stepIdMap, companyId));
-      if (cardRows.length) {
-        // upsert em lotes de 200
-        for (let i = 0; i < cardRows.length; i += 200) {
-          await upsertRows("cards", cardRows.slice(i, i + 200), "external_id,company_id");
-        }
-        stats.cards += cardRows.length;
+      // 4. Upsert etapas
+      const steps = panel.steps ?? [];
+      const stepRows = steps.map(s => mapStep(s, panelInternalId, companyId));
+      if (stepRows.length) {
+        await upsertRows("panel_steps", stepRows, "external_id,company_id");
+        stats.steps += stepRows.length;
       }
-    } catch {
-      // ignora erro de cards de um painel específico
-    }
-  }
 
-  return Response.json({ ok: true, synced: stats });
+      // Mapa external_id → internal_id das etapas
+      const stepIdMap = {};
+      if (steps.length) {
+        const dbSteps = await fetch(
+          `${SUPABASE_URL}/rest/v1/panel_steps?panel_id=eq.${panelInternalId}&select=id,external_id`,
+          {
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": `Bearer ${SUPABASE_KEY}`,
+              "Accept-Profile": "crm",
+            },
+          }
+        ).then(r => r.json());
+        for (const s of (dbSteps ?? [])) stepIdMap[s.external_id] = s.id;
+      }
+
+      // 5. Upsert etiquetas do painel
+      const tags = panel.tags ?? [];
+      if (tags.length) {
+        await upsertRows("panel_tags", tags.map(t => mapTag(t, panelInternalId, companyId)), "external_id,company_id");
+        stats.tags += tags.length;
+      }
+
+      // 6. Busca e upsert cards (paginado)
+      try {
+        const cards = await fetchAllCards(apiBaseUrl, apiToken, panel.id);
+        const cardRows = cards.map(c => mapCard(c, panelInternalId, stepIdMap, companyId));
+        if (cardRows.length) {
+          for (let i = 0; i < cardRows.length; i += 200) {
+            await upsertRows("cards", cardRows.slice(i, i + 200), "external_id,company_id");
+          }
+          stats.cards += cardRows.length;
+        }
+      } catch (e) {
+        console.error(`cards panel ${panel.id}:`, e.message);
+      }
+    }
+
+    return Response.json({ ok: true, synced: stats });
+
+  } catch (e) {
+    console.error("sync error:", e);
+    return Response.json({ error: "internal_error", detail: e.message }, { status: 500 });
+  }
 }
