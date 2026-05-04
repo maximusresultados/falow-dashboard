@@ -43,39 +43,79 @@ async function upsertRows(table, rows, onConflict) {
 
 // ── WTS API helpers ───────────────────────────────────────────────────────────
 
-async function wts(apiBaseUrl, apiToken, method, path, body) {
-  const url = `${apiBaseUrl.replace(/\/$/, "")}/core/v1/${path}`;
+function baseUrl(apiBaseUrl) {
+  return apiBaseUrl.replace(/\/$/, "");
+}
+
+async function wtsGet(apiBaseUrl, apiToken, path, queryParams) {
+  const params = new URLSearchParams();
+  if (queryParams) {
+    for (const [k, v] of Object.entries(queryParams)) {
+      if (Array.isArray(v)) v.forEach(item => params.append(k, item));
+      else params.append(k, v);
+    }
+  }
+  const qs  = params.toString();
+  const url = `${baseUrl(apiBaseUrl)}/crm/v1/${path}${qs ? "?" + qs : ""}`;
   const res = await fetch(url, {
-    method,
-    headers: {
-      "Authorization": `Bearer ${apiToken}`,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    method: "GET",
+    headers: { "Authorization": `Bearer ${apiToken}`, "Content-Type": "application/json" },
   });
   if (!res.ok) {
     let detail = "";
     try { detail = await res.text(); } catch {}
-    throw new Error(`WTS ${method} ${path}: HTTP ${res.status} — ${detail.slice(0, 200)}`);
+    throw new Error(`WTS GET ${path}: HTTP ${res.status} — ${detail.slice(0, 200)}`);
   }
   return res.json();
+}
+
+async function wtsPost(apiBaseUrl, apiToken, path, body) {
+  const url = `${baseUrl(apiBaseUrl)}/crm/v1/${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try { detail = await res.text(); } catch {}
+    throw new Error(`WTS POST ${path}: HTTP ${res.status} — ${detail.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+async function fetchAllPanels(apiBaseUrl, apiToken) {
+  const panels = [];
+  let page = 1;
+  while (true) {
+    const data = await wtsGet(apiBaseUrl, apiToken, "panel", {
+      IncludeDetails: ["steps", "tags"],
+      PageNumber: page,
+      PageSize: 100,
+    });
+    const items = data?.items ?? [];
+    panels.push(...items);
+    if (items.length < 100) break;
+    page++;
+    if (page > 20) break;
+  }
+  return panels;
 }
 
 async function fetchAllCards(apiBaseUrl, apiToken, panelId) {
   const cards = [];
   let page = 1;
-  const limit = 100;
   while (true) {
-    const data = await wts(apiBaseUrl, apiToken, "POST", "card/filter", {
-      panelId,
-      page,
-      limit,
+    const data = await wtsPost(apiBaseUrl, apiToken, "card/filter", {
+      PanelId: panelId,
+      PageNumber: page,
+      PageSize: 100,
     });
-    const items = Array.isArray(data) ? data : (data?.data ?? data?.items ?? []);
+    const items = data?.items ?? (Array.isArray(data) ? data : []);
     cards.push(...items);
-    if (items.length < limit) break;
+    if (items.length < 100) break;
     page++;
-    if (page > 50) break; // safety cap: 5000 cards
+    if (page > 50) break;
   }
   return cards;
 }
@@ -173,20 +213,12 @@ export async function POST(request, { params }) {
 
   if (!apiToken) return Response.json({ error: "no_api_token" }, { status: 400 });
 
-  // 2. Busca painéis da WTS (tenta "panel" e "pipeline" como fallback)
+  // 2. Busca painéis da WTS
   let panels;
-  let panelsError;
-  for (const endpoint of ["panel", "pipeline", "kanban"]) {
-    try {
-      const raw = await wts(apiBaseUrl, apiToken, "GET", endpoint, null);
-      panels = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? raw?.panels ?? raw?.pipelines ?? []);
-      if (panels.length >= 0) break; // endpoint válido
-    } catch (e) {
-      panelsError = e.message;
-    }
-  }
-  if (!panels) {
-    return Response.json({ error: "wts_panels_failed", detail: panelsError }, { status: 502 });
+  try {
+    panels = await fetchAllPanels(apiBaseUrl, apiToken);
+  } catch (e) {
+    return Response.json({ error: "wts_panels_failed", detail: e.message }, { status: 502 });
   }
 
   const stats = { panels: 0, steps: 0, tags: 0, cards: 0 };
