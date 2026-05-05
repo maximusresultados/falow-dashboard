@@ -22,24 +22,6 @@ async function callRpc(fn, body) {
   return res.json();
 }
 
-async function upsertRows(table, rows, onConflict) {
-  if (!rows.length) return;
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Content-Profile": "crm",
-      "Prefer": "resolution=merge-duplicates,return=minimal",
-    },
-    body: JSON.stringify(rows),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`upsert ${table}: ${res.status} ${err}`);
-  }
-}
 
 // ── WTS API helpers ───────────────────────────────────────────────────────────
 
@@ -219,62 +201,36 @@ export async function POST(request, { params }) {
     const stats = { panels: 0, steps: 0, tags: 0, cards: 0 };
 
     for (const panel of panels) {
-      // 3. Upsert painel e busca id interno
-      await upsertRows("panels", [mapPanel(panel, companyId)], "external_id,company_id");
+      // 3. Upsert painel + etapas + etiquetas via RPC
+      const syncResult = await callRpc("admin_sync_panel", {
+        p_rpc_token:  ADMIN_RPC_TOKEN,
+        p_company_id: companyId,
+        p_panel:      panel,
+      });
 
-      const panelRows = await fetch(
-        `${SUPABASE_URL}/rest/v1/panels?external_id=eq.${panel.id}&company_id=eq.${companyId}&select=id`,
-        {
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": `Bearer ${SUPABASE_KEY}`,
-            "Accept-Profile": "crm",
-          },
-        }
-      ).then(r => r.json());
+      if (syncResult?.error) {
+        throw new Error(`admin_sync_panel: ${syncResult.error}`);
+      }
 
-      const panelInternalId = panelRows?.[0]?.id;
+      const panelInternalId = syncResult?.panel_id;
       if (!panelInternalId) continue;
       stats.panels++;
 
-      // 4. Upsert etapas
-      const steps = panel.steps ?? [];
-      const stepRows = steps.map(s => mapStep(s, panelInternalId, companyId));
-      if (stepRows.length) {
-        await upsertRows("panel_steps", stepRows, "external_id,company_id");
-        stats.steps += stepRows.length;
-      }
+      const stepMap = syncResult?.step_map ?? {};
+      stats.steps += Object.keys(stepMap).length;
+      stats.tags  += (panel.tags ?? []).length;
 
-      // Mapa external_id → internal_id das etapas
-      const stepIdMap = {};
-      if (steps.length) {
-        const dbSteps = await fetch(
-          `${SUPABASE_URL}/rest/v1/panel_steps?panel_id=eq.${panelInternalId}&select=id,external_id`,
-          {
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": `Bearer ${SUPABASE_KEY}`,
-              "Accept-Profile": "crm",
-            },
-          }
-        ).then(r => r.json());
-        for (const s of (dbSteps ?? [])) stepIdMap[s.external_id] = s.id;
-      }
-
-      // 5. Upsert etiquetas do painel
-      const tags = panel.tags ?? [];
-      if (tags.length) {
-        await upsertRows("panel_tags", tags.map(t => mapTag(t, panelInternalId, companyId)), "external_id,company_id");
-        stats.tags += tags.length;
-      }
-
-      // 6. Busca e upsert cards (paginado)
+      // 4. Busca e upsert cards via RPC (paginado)
       try {
         const cards = await fetchAllCards(apiBaseUrl, apiToken, panel.id);
-        const cardRows = cards.map(c => mapCard(c, panelInternalId, stepIdMap, companyId));
-        if (cardRows.length) {
+        if (cards.length) {
+          const cardRows = cards.map(c => mapCard(c, panelInternalId, stepMap, companyId));
           for (let i = 0; i < cardRows.length; i += 200) {
-            await upsertRows("cards", cardRows.slice(i, i + 200), "external_id,company_id");
+            const res = await callRpc("admin_upsert_cards", {
+              p_rpc_token: ADMIN_RPC_TOKEN,
+              p_cards:     cardRows.slice(i, i + 200),
+            });
+            if (res?.error) throw new Error(`admin_upsert_cards: ${res.error}`);
           }
           stats.cards += cardRows.length;
         }
