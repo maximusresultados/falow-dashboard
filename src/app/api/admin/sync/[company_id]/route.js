@@ -88,14 +88,16 @@ async function fetchAllCards(apiBaseUrl, apiToken, panelId) {
   const cards = [];
   let page = 1;
   while (true) {
-    const data = await wtsPost(apiBaseUrl, apiToken, "card/filter", {
-      PanelId: panelId,
-      PageNumber: page,
-      PageSize: 100,
+    const data = await wtsGet(apiBaseUrl, apiToken, "panel/card", {
+      PanelId:        panelId,
+      PageNumber:     page,
+      PageSize:       100,
+      IncludeDetails: ["StepTitle", "StepPhase", "ResponsibleUser", "Contacts"],
+      IncludeArchived: true,
     });
-    const items = data?.items ?? (Array.isArray(data) ? data : []);
+    const items = data?.items ?? [];
     cards.push(...items);
-    if (items.length < 100) break;
+    if (!data?.hasMorePages) break;
     page++;
     if (page > 50) break;
   }
@@ -153,13 +155,13 @@ function mapCard(c, panelInternalId, stepIdMap, companyId) {
     step_phase:            c.stepPhase           ?? c.step_phase           ?? null,
     title:                 c.title               ?? null,
     description:           c.description         ?? null,
-    card_number:           c.cardNumber          ?? c.card_number          ?? null,
-    card_key:              c.cardKey             ?? c.card_key             ?? null,
+    card_number:           c.number              ?? c.cardNumber          ?? c.card_number ?? null,
+    card_key:              c.key                 ?? c.cardKey             ?? c.card_key    ?? null,
     monetary_amount:       c.monetaryAmount      ?? c.monetary_amount      ?? null,
     responsible_user_id:   c.responsibleUserId   ?? c.responsible_user_id  ?? null,
-    responsible_user_name: c.responsibleUserName ?? c.responsible_user_name ?? null,
+    responsible_user_name: c.responsibleUser?.name ?? c.responsibleUserName ?? c.responsible_user_name ?? null,
     contact_ids:           c.contactIds          ?? c.contact_ids          ?? null,
-    contact_name:          c.contactName         ?? c.contact_name         ?? null,
+    contact_name:          c.contacts?.[0]?.name ?? c.contactName         ?? c.contact_name ?? null,
     tag_ids:               c.tagIds              ?? c.tag_ids              ?? null,
     due_date:              c.dueDate             ?? c.due_date             ?? null,
     is_overdue:            c.isOverdue           ?? c.is_overdue           ?? false,
@@ -199,6 +201,7 @@ export async function POST(request, { params }) {
     }
 
     const stats = { panels: 0, steps: 0, tags: 0, cards: 0 };
+    const cardErrors = [];
 
     for (const panel of panels) {
       // 3. Upsert painel + etapas + etiquetas via RPC
@@ -235,11 +238,15 @@ export async function POST(request, { params }) {
           stats.cards += cardRows.length;
         }
       } catch (e) {
-        console.error(`cards panel ${panel.id}:`, e.message);
+        cardErrors.push({ panel: panel.title, error: e.message });
       }
     }
 
-    return Response.json({ ok: true, synced: stats });
+    return Response.json({
+      ok: true,
+      synced: stats,
+      ...(cardErrors.length ? { card_errors: cardErrors } : {}),
+    });
 
   } catch (e) {
     console.error("sync error:", e);

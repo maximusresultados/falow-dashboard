@@ -733,7 +733,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (data?.ok) {
         const s = data.synced;
-        setSyncResult(prev => ({ ...prev, [co.id]: { ok: true, msg: `${s.panels} painéis · ${s.steps} etapas · ${s.cards} cards` } }));
+        setSyncResult(prev => ({ ...prev, [co.id]: { ok: true, msg: `${s.panels} painéis · ${s.steps} etapas · ${s.cards} cards`, cardErrors: data.card_errors ?? [] } }));
       } else {
         const msg = [data.error, data.detail].filter(Boolean).join(" — ");
         setSyncResult(prev => ({ ...prev, [co.id]: { ok: false, msg: msg || "Erro desconhecido" } }));
@@ -893,13 +893,24 @@ export default function AdminPage() {
 
                     {/* Resultado da sincronização */}
                     {syncResult[co.id] && (
-                      <div style={{
-                        marginTop: 8, padding: "6px 10px", borderRadius: 6, fontSize: 12,
-                        color:       syncResult[co.id].ok ? C.green : C.red,
-                        background:  syncResult[co.id].ok ? C.greenGlow : C.redGlow,
-                        border: `1px solid ${syncResult[co.id].ok ? C.green : C.red}30`,
-                      }}>
-                        {syncResult[co.id].ok ? "✓ Sincronizado: " : "⚠ "}{syncResult[co.id].msg}
+                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{
+                          padding: "6px 10px", borderRadius: 6, fontSize: 12,
+                          color:       syncResult[co.id].ok ? C.green : C.red,
+                          background:  syncResult[co.id].ok ? C.greenGlow : C.redGlow,
+                          border: `1px solid ${syncResult[co.id].ok ? C.green : C.red}30`,
+                        }}>
+                          {syncResult[co.id].ok ? "✓ Sincronizado: " : "⚠ "}{syncResult[co.id].msg}
+                        </div>
+                        {syncResult[co.id].cardErrors?.map((e, i) => (
+                          <div key={i} style={{
+                            padding: "5px 10px", borderRadius: 6, fontSize: 11,
+                            color: C.amber, background: C.amberGlow,
+                            border: `1px solid ${C.amber}30`,
+                          }}>
+                            ⚠ Cards — {e.panel}: {e.error}
+                          </div>
+                        ))}
                       </div>
                     )}
 
