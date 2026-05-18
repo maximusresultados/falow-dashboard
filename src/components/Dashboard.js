@@ -487,6 +487,8 @@ export default function Dashboard({ token }) {
   const [panels, setPanels] = useState([]);
   const [selectedPanel, setSelectedPanel] = useState(null);
   const [showGlossary, setShowGlossary] = useState(false);
+  const [teamPeriod, setTeamPeriod] = useState("mes");
+  const [rankingLoading, setRankingLoading] = useState(false);
 
   // Fetch panels list (once)
   useEffect(() => {
@@ -503,11 +505,10 @@ export default function Dashboard({ token }) {
     const errs = [];
     const panel = selectedPanel;
 
-    const [kpiRaw, funnelRaw, evoRaw, rankRaw, overdueRaw, etiquetasRaw, wtsRaw] = await Promise.all([
+    const [kpiRaw, funnelRaw, evoRaw, overdueRaw, etiquetasRaw, wtsRaw] = await Promise.all([
       rpc("dashboard_kpis", token, panel),
       rpc("dashboard_funnel", token, panel),
       rpc("dashboard_evolution", token, panel),
-      rpc("dashboard_ranking", token, panel),
       rpc("dashboard_overdue", token, panel),
       rpc("dashboard_etiquetas", token, panel),
       rpc("dashboard_wts_credentials", token),
@@ -533,10 +534,6 @@ export default function Dashboard({ token }) {
     const e = parseRpcResponse(evoRaw, "dashboard_evolution");
     if (Array.isArray(e)) setEvolution(e.map(i => ({ mes: i.mes, criados: parseInt(i.criados) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0 })));
     else errs.push("Evolução");
-
-    const r = parseRpcResponse(rankRaw, "dashboard_ranking");
-    if (Array.isArray(r)) setRanking(r.map(i => ({ responsavel: i.responsavel, total: parseInt(i.total) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, receita: parseFloat(i.receita) || 0, taxa: parseFloat(i.taxa) || 0 })));
-    else errs.push("Ranking");
 
     const o = parseRpcResponse(overdueRaw, "dashboard_overdue");
     if (Array.isArray(o)) setOverdue(o.map(i => ({ codigo: i.codigo || "—", titulo: i.titulo || "—", responsavel: i.responsavel || "—", etapa: i.etapa || "—", valor: parseFloat(i.valor) || 0, dias: parseInt(i.dias) || 0 })));
@@ -564,7 +561,17 @@ export default function Dashboard({ token }) {
   }, [token, selectedPanel]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { const id = setInterval(fetchData, 5 * 60 * 1000); return () => clearInterval(id); }, [fetchData]);
+
+  const fetchRanking = useCallback(async () => {
+    setRankingLoading(true);
+    const raw = await rpc("dashboard_ranking", token, selectedPanel, { p_period: teamPeriod });
+    const r = parseRpcResponse(raw, "dashboard_ranking");
+    if (Array.isArray(r)) setRanking(r.map(i => ({ responsavel: i.responsavel, total: parseInt(i.total) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, receita: parseFloat(i.receita) || 0, taxa: parseFloat(i.taxa) || 0 })));
+    setRankingLoading(false);
+  }, [token, selectedPanel, teamPeriod]);
+
+  useEffect(() => { fetchRanking(); }, [fetchRanking]);
+  useEffect(() => { const id = setInterval(() => { fetchData(); fetchRanking(); }, 5 * 60 * 1000); return () => clearInterval(id); }, [fetchData, fetchRanking]);
 
   // Carrega etiquetas de contatos via WTS API (lazy, apenas quando a view for aberta)
   useEffect(() => {
@@ -746,6 +753,27 @@ export default function Dashboard({ token }) {
         {/* TEAM */}
         {tab === "team" && (<>
           <SectionHeader icon="👥" subtitle="Desempenho individual">Performance da Equipe</SectionHeader>
+
+          {/* SELETOR DE PERÍODO */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 20, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Período:</span>
+            {[
+              { key: "dia",    label: "Hoje" },
+              { key: "semana", label: "Esta semana" },
+              { key: "mes",    label: "Este mês" },
+              { key: "ano",    label: "Este ano" },
+            ].map(p => (
+              <button key={p.key} onClick={() => setTeamPeriod(p.key)} style={{
+                padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                border: `1px solid ${teamPeriod === p.key ? C.brand : C.border}`,
+                background: teamPeriod === p.key ? C.brand : "transparent",
+                color: teamPeriod === p.key ? "#fff" : C.textMuted,
+                transition: "all 0.15s",
+              }}>{p.label}</button>
+            ))}
+            {rankingLoading && <span style={{ fontSize: 11, color: C.textDim, marginLeft: 4 }}>atualizando...</span>}
+          </div>
+
           {ranking?.length > 0 ? (<>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14, marginBottom: 20 }}>
               {ranking.slice(0, 4).map((r, i) => (
@@ -772,7 +800,11 @@ export default function Dashboard({ token }) {
               <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>Ranking Completo</div>
               <DataTable columns={rankCols} data={ranking} />
             </div>
-          </>) : <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>Sem dados de responsáveis</div>}
+          </>) : (
+            <div style={{ padding: 40, textAlign: "center", color: C.textDim }}>
+              {rankingLoading ? "Carregando..." : `Nenhum dado para o período selecionado`}
+            </div>
+          )}
         </>)}
 
         {/* ALERTS */}
