@@ -131,7 +131,7 @@ export async function syncCompany(companyId) {
     return { error: "wts_panels_failed", detail: e.message };
   }
 
-  const stats = { panels: 0, steps: 0, tags: 0, cards: 0 };
+  const stats = { panels: 0, steps: 0, tags: 0, cards: 0, deleted: 0 };
   const cardErrors = [];
 
   for (const panel of panels) {
@@ -153,6 +153,7 @@ export async function syncCompany(companyId) {
 
     try {
       const cards = await fetchAllCards(apiBaseUrl, apiToken, panel.id);
+
       if (cards.length) {
         const cardRows = cards.map(c => mapCard(c, panelInternalId, stepMap, companyId));
         for (let i = 0; i < cardRows.length; i += 200) {
@@ -164,6 +165,13 @@ export async function syncCompany(companyId) {
         }
         stats.cards += cardRows.length;
       }
+
+      const cleanupRes = await callRpc("admin_cleanup_panel_cards", {
+        p_rpc_token:    ADMIN_RPC_TOKEN,
+        p_panel_id:     panelInternalId,
+        p_external_ids: cards.map(c => c.id),
+      });
+      if (cleanupRes?.deleted) stats.deleted += cleanupRes.deleted;
     } catch (e) {
       cardErrors.push({ panel: panel.title, error: e.message });
     }
