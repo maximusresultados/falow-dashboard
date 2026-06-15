@@ -71,7 +71,7 @@ async function fetchAllCards(apiBaseUrl, apiToken, panelId) {
       PanelId:        panelId,
       PageNumber:     page,
       PageSize:       100,
-      IncludeDetails: ["StepTitle", "StepPhase", "ResponsibleUser", "Contacts"],
+      IncludeDetails: ["StepTitle", "StepPhase", "ResponsibleUser", "Contacts", "CustomFields"],
     });
     const items = data?.items ?? [];
     cards.push(...items);
@@ -83,6 +83,16 @@ async function fetchAllCards(apiBaseUrl, apiToken, panelId) {
 }
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
+
+function parseDataVendido(customFields) {
+  if (!customFields) return null;
+  const val = customFields["data-vendido"];
+  const str = Array.isArray(val) ? val[0] : val;
+  if (!str) return null;
+  const iso = str.replace(/\//g, "-"); // "2026/06/10" → "2026-06-10"
+  const d = new Date(iso + "T12:00:00Z");
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 function mapCard(c, panelInternalId, stepIdMap, companyId) {
   const stepInternalId = stepIdMap[c.stepId ?? c.step_id] ?? null;
@@ -107,6 +117,7 @@ function mapCard(c, panelInternalId, stepIdMap, companyId) {
     archived:              c.archived            ?? false,
     created_at:            c.createdAt           ?? c.created_at           ?? null,
     updated_at:            c.updatedAt           ?? c.updated_at           ?? null,
+    won_at:                parseDataVendido(c.customFields ?? c.custom_fields ?? null),
     company_id:            companyId,
     synced_at:             new Date().toISOString(),
   };
