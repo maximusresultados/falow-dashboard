@@ -665,7 +665,7 @@ export default function Dashboard({ token }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <PanelSelect panels={panels} selected={selectedPanel} onChange={setSelectedPanel} />
             {errors.length > 0 && <span style={{ fontSize: 10, color: C.amber }}>⚠️ {errors.join(", ")}</span>}
-            <button onClick={fetchData} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", background: "transparent", color: C.textMuted, fontSize: 11, fontWeight: 600, opacity: loading ? 0.5 : 1 }}>{loading ? "⏳" : "🔄"}</button>
+            <button onClick={() => { fetchData(); fetchRanking(); }} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", background: "transparent", color: C.textMuted, fontSize: 11, fontWeight: 600, opacity: loading ? 0.5 : 1 }}>{loading ? "⏳" : "🔄"}</button>
             {lastSync && <div style={{ fontSize: 10, color: C.textDim }}>{lastSync.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>}
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: errors.length ? C.amber : C.green, boxShadow: `0 0 8px ${errors.length ? C.amber : C.green}` }} />
           </div>
