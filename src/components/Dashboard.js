@@ -484,6 +484,7 @@ export default function Dashboard({ token }) {
   const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null);
   const [errors, setErrors] = useState([]);
   const [lastSync, setLastSync] = useState(null);
   const [kpis, setKpis] = useState(null);
@@ -592,9 +593,20 @@ export default function Dashboard({ token }) {
 
   const handleRefresh = useCallback(async () => {
     setSyncing(true);
-    try { await fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }); } catch {}
-    setSyncing(false);
+    setSyncMsg(null);
+    try {
+      const res = await fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+      const data = await res.json();
+      if (data?.ok) {
+        setSyncMsg(`Sincronizado: ${data.synced?.cards ?? 0} cards, ${data.synced?.deleted ?? 0} removidos`);
+      } else {
+        setSyncMsg(`Erro: ${data?.error ?? "falha no sync"}`);
+      }
+    } catch {
+      setSyncMsg("Erro de conexão ao sincronizar");
+    }
     await Promise.all([fetchData(), fetchRanking()]);
+    setSyncing(false);
   }, [token, fetchData, fetchRanking]);
 
   // Carrega etiquetas de contatos via WTS API (lazy, apenas quando a view for aberta)
@@ -692,6 +704,7 @@ export default function Dashboard({ token }) {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <PanelSelect panels={panels} selected={selectedPanel} onChange={setSelectedPanel} />
             {errors.length > 0 && <span style={{ fontSize: 10, color: C.amber }}>⚠️ {errors.join(", ")}</span>}
+            {syncMsg && <span style={{ fontSize: 10, color: syncMsg.startsWith("Erro") ? C.red : C.green, maxWidth: 260 }}>{syncMsg}</span>}
             <button onClick={handleRefresh} disabled={loading || syncing} style={{ padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, cursor: "pointer", background: "transparent", color: C.textMuted, fontSize: 11, fontWeight: 600, opacity: (loading || syncing) ? 0.5 : 1 }}>{syncing ? "⏳ Sincronizando..." : loading ? "⏳" : "🔄 Atualizar"}</button>
             {lastSync && <div style={{ fontSize: 10, color: C.textDim }}>{lastSync.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>}
             <div style={{ width: 7, height: 7, borderRadius: "50%", background: errors.length ? C.amber : C.green, boxShadow: `0 0 8px ${errors.length ? C.amber : C.green}` }} />
