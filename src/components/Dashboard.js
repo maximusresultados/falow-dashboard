@@ -14,6 +14,8 @@ import { rpc, parseRpcResponse } from "@/lib/supabase";
 const LOGO_URL = "https://pdolixqxogpwufwunyds.supabase.co/storage/v1/object/public/LOGO%20FALOW%20CRM/LOGO%20FALOWCRM%20-%20OFICIAL%20(1200%20x%20500%20px)%20(3).png";
 const ICON_URL = "https://pdolixqxogpwufwunyds.supabase.co/storage/v1/object/public/LOGO%20FALOW%20CRM/ICONE%20-%20FALOWCRM.png";
 
+const HIDDEN_USERS = ["ROGÉRIO MARTINS", "ROGERIO MARTINS"];
+
 // ══════════════════════════════════════════════
 // FORMATTING
 // ══════════════════════════════════════════════
@@ -554,7 +556,7 @@ export default function Dashboard({ token }) {
     else errs.push("Evolução");
 
     const o = parseRpcResponse(overdueRaw, "dashboard_overdue");
-    if (Array.isArray(o)) setOverdue(o.map(i => ({ codigo: i.codigo || "—", titulo: i.titulo || "—", responsavel: i.responsavel || "—", etapa: i.etapa || "—", valor: parseFloat(i.valor) || 0, dias: parseInt(i.dias) || 0 })));
+    if (Array.isArray(o)) setOverdue(o.map(i => ({ codigo: i.codigo || "—", titulo: i.titulo || "—", responsavel: i.responsavel || "—", etapa: i.etapa || "—", valor: parseFloat(i.valor) || 0, dias: parseInt(i.dias) || 0 })).filter(i => !HIDDEN_USERS.includes((i.responsavel || "").toUpperCase())));
     else setOverdue([]);
 
     const et = parseRpcResponse(etiquetasRaw, "dashboard_etiquetas");
@@ -584,7 +586,7 @@ export default function Dashboard({ token }) {
     setRankingLoading(true);
     const raw = await rpc("dashboard_ranking", token, selectedPanel, { p_period: teamPeriod });
     const r = parseRpcResponse(raw, "dashboard_ranking");
-    if (Array.isArray(r)) setRanking(r.map(i => ({ responsavel: i.responsavel, total: parseInt(i.total) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, receita: parseFloat(i.receita) || 0, taxa: parseFloat(i.taxa) || 0, ganhos_detalhe: Array.isArray(i.ganhos_detalhe) ? i.ganhos_detalhe : [] })));
+    if (Array.isArray(r)) setRanking(r.map(i => ({ responsavel: i.responsavel, total: parseInt(i.total) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, receita: parseFloat(i.receita) || 0, taxa: parseFloat(i.taxa) || 0, ganhos_detalhe: Array.isArray(i.ganhos_detalhe) ? i.ganhos_detalhe : [] })).filter(i => !HIDDEN_USERS.includes((i.responsavel || "").toUpperCase())));
     setRankingLoading(false);
   }, [token, selectedPanel, teamPeriod]);
 
