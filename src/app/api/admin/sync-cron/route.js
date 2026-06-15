@@ -1,5 +1,7 @@
 import { syncCompany, listCompanies } from "@/lib/syncCompany";
 
+export const maxDuration = 60;
+
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(request) {
@@ -9,16 +11,16 @@ export async function GET(request) {
   }
 
   const companies = await listCompanies();
-  const results   = [];
 
-  for (const co of companies) {
-    try {
-      const result = await syncCompany(co.id);
-      results.push({ id: co.id, name: co.name, ...result });
-    } catch (e) {
-      results.push({ id: co.id, name: co.name, error: e.message });
-    }
-  }
+  const settled = await Promise.allSettled(
+    companies.map(co =>
+      syncCompany(co.id)
+        .then(result => ({ id: co.id, name: co.name, ...result }))
+        .catch(e  => ({ id: co.id, name: co.name, error: e.message }))
+    )
+  );
+
+  const results = settled.map(s => s.value ?? s.reason);
 
   console.log("sync-cron:", JSON.stringify({ synced_at: new Date().toISOString(), results }));
 
