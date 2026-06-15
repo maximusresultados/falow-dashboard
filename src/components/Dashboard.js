@@ -25,6 +25,11 @@ function formatBRL(v) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function fullBRL(v) {
+  if (v == null || isNaN(v) || Math.abs(v) < 1000) return null;
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function formatNum(v) {
   if (v == null || isNaN(v)) return "0";
   return v.toLocaleString("pt-BR");
@@ -289,21 +294,32 @@ function GlossaryButton({ onClick }) {
 // UI COMPONENTS
 // ══════════════════════════════════════════════
 
-function KPICard({ label, value, icon, color, glow, subtitle }) {
+function KPICard({ label, value, icon, color, glow, subtitle, tooltip }) {
   const [h, setH] = useState(false);
   return (
     <div onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{
       background: h ? C.cardHover : C.card, border: `1px solid ${h ? C.borderLight : C.border}`,
-      borderRadius: 14, padding: "22px 24px", position: "relative", overflow: "hidden",
+      borderRadius: 14, padding: "22px 24px", position: "relative", overflow: "visible",
       transition: "all 0.25s ease", transform: h ? "translateY(-3px)" : "none",
       boxShadow: h ? `0 12px 40px ${glow || C.brandGlow}` : "0 2px 8px #0003", cursor: "default",
     }}>
-      <div style={{ position: "absolute", top: -30, right: -30, width: 100, height: 100, borderRadius: "50%", background: `${color}06` }} />
+      <div style={{ position: "absolute", top: -30, right: -30, width: 100, height: 100, borderRadius: "50%", background: `${color}06`, pointerEvents: "none" }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2 }}>{label}</span>
         <span style={{ fontSize: 18, opacity: 0.8 }}>{icon}</span>
       </div>
-      <div style={{ fontSize: 30, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: NUM_FONT, letterSpacing: -0.5 }}>{value}</div>
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <div style={{ fontSize: 30, fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: NUM_FONT, letterSpacing: -0.5 }}>{value}</div>
+        {tooltip && h && (
+          <div style={{
+            position: "absolute", bottom: "calc(100% + 6px)", left: 0,
+            background: C.bgAlt, border: `1px solid ${C.borderLight}`,
+            borderRadius: 6, padding: "5px 10px", fontSize: 12, fontWeight: 600,
+            color: C.text, whiteSpace: "nowrap", zIndex: 200,
+            pointerEvents: "none", boxShadow: "0 4px 16px #0008",
+          }}>{tooltip}</div>
+        )}
+      </div>
       {subtitle && <div style={{ fontSize: 11, color: color || C.textMuted, marginTop: 8, fontWeight: 600 }}>{subtitle}</div>}
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${color}, ${color}00)`, opacity: h ? 1 : 0.5, transition: "opacity 0.3s" }} />
     </div>
@@ -349,7 +365,7 @@ function DataTable({ columns, data, emptyMsg = "Sem dados" }) {
             onMouseEnter={e => e.currentTarget.style.background = C.cardHover}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
             {columns.map((col, ci) => (
-              <td key={ci} style={{ padding: "11px 14px", textAlign: col.align || "left", color: col.color ? col.color(row) : C.text, borderBottom: `1px solid ${C.border}40`, fontWeight: col.bold ? 700 : 400, fontFamily: col.mono ? NUM_FONT : "inherit", fontSize: 12 }}>
+              <td key={ci} title={col.tooltip ? col.tooltip(row) ?? undefined : undefined} style={{ padding: "11px 14px", textAlign: col.align || "left", color: col.color ? col.color(row) : C.text, borderBottom: `1px solid ${C.border}40`, fontWeight: col.bold ? 700 : 400, fontFamily: col.mono ? NUM_FONT : "inherit", fontSize: 12, cursor: col.tooltip ? "help" : "default" }}>
                 {col.render ? col.render(row) : row[col.key]}
               </td>
             ))}
@@ -606,7 +622,7 @@ export default function Dashboard({ token }) {
     { key: "total", label: "Total", align: "center" },
     { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
     { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
-    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
+    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita), tooltip: r => fullBRL(r.receita) },
     { key: "taxa", label: "Conversão", align: "center", render: r => <Badge text={r.taxa ? `${r.taxa}%` : "—"} color={r.taxa >= 50 ? C.green : r.taxa >= 25 ? C.amber : C.red} /> },
   ];
 
@@ -615,7 +631,7 @@ export default function Dashboard({ token }) {
     { key: "titulo", label: "Título", bold: true },
     { key: "responsavel", label: "Responsável" },
     { key: "etapa", label: "Etapa" },
-    { key: "valor", label: "Valor", align: "right", mono: true, render: r => formatBRL(r.valor) },
+    { key: "valor", label: "Valor", align: "right", mono: true, render: r => formatBRL(r.valor), tooltip: r => fullBRL(r.valor) },
     { key: "dias", label: "Atraso", align: "center", render: r => <Badge text={`${r.dias}d`} color={r.dias > 7 ? C.red : C.amber} /> },
   ];
 
@@ -679,14 +695,14 @@ export default function Dashboard({ token }) {
         {tab === "overview" && kpis && (<>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14 }}>
             <KPICard label="Cards Ativos" value={formatNum(kpis.ativos)} icon="📋" color={C.brand} glow={C.brandGlow} subtitle="No pipeline" />
-            <KPICard label="Valor Pipeline" value={formatBRL(kpis.valorPipeline)} icon="💰" color={C.amber} glow={C.amberGlow} />
+            <KPICard label="Valor Pipeline" value={formatBRL(kpis.valorPipeline)} tooltip={fullBRL(kpis.valorPipeline)} icon="💰" color={C.amber} glow={C.amberGlow} />
             <KPICard label="Atrasados" value={formatNum(kpis.atrasados)} icon="⏰" color={C.red} glow={C.redGlow} subtitle={kpis.atrasados > 0 ? "⚡ Ação necessária" : "✓ Tudo em dia"} />
-            <KPICard label="Ticket Médio" value={formatBRL(kpis.ticketMedio)} icon="🎯" color={C.purple} />
+            <KPICard label="Ticket Médio" value={formatBRL(kpis.ticketMedio)} tooltip={fullBRL(kpis.ticketMedio)} icon="🎯" color={C.purple} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(195px, 1fr))", gap: 14, marginTop: 14 }}>
             <KPICard label="Ganhos" value={formatNum(kpis.ganhos)} icon="✅" color={C.green} glow={C.greenGlow} />
             <KPICard label="Perdidos" value={formatNum(kpis.perdidos)} icon="❌" color={C.red} glow={C.redGlow} />
-            <KPICard label="Receita Total" value={formatBRL(kpis.receita)} icon="🏆" color={C.emerald} />
+            <KPICard label="Receita Total" value={formatBRL(kpis.receita)} tooltip={fullBRL(kpis.receita)} icon="🏆" color={C.emerald} />
             <KPICard label="Conversão" value={`${kpis.taxaConversao || 0}%`} icon="📈" color={C.cyan} />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "5fr 2fr", gap: 14, marginTop: 20 }}>
@@ -743,7 +759,7 @@ export default function Dashboard({ token }) {
               <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>Detalhamento</div>
               <DataTable columns={[
                 { key: "etapa", label: "Etapa", bold: true }, { key: "total", label: "Cards", align: "center" },
-                { key: "valor", label: "Valor", align: "right", mono: true, render: r => formatBRL(r.valor) },
+                { key: "valor", label: "Valor", align: "right", mono: true, render: r => formatBRL(r.valor), tooltip: r => fullBRL(r.valor) },
                 { key: "pct", label: "% Total", align: "center", render: r => { const t = funnel.reduce((s, f) => s + f.total, 0); return t > 0 ? `${(r.total * 100 / t).toFixed(1)}%` : "0%"; } },
               ]} data={funnel} />
             </div>
@@ -917,7 +933,7 @@ export default function Dashboard({ token }) {
                     { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
                     { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
                     { key: "em_pipeline", label: "Pipeline", align: "center", color: () => C.brand },
-                    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
+                    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita), tooltip: r => fullBRL(r.receita) },
                     { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
                   ]}
                   data={etiquetasFilt}
@@ -1001,7 +1017,7 @@ export default function Dashboard({ token }) {
                     { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
                     { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
                     { key: "valor_pipeline", label: "Pipeline", align: "right", mono: true, render: r => formatBRL(r.valor_pipeline) },
-                    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita) },
+                    { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita), tooltip: r => fullBRL(r.receita) },
                     { key: "taxa_conversao", label: "Conversão", align: "center", render: r => <Badge text={r.taxa_conversao != null ? `${r.taxa_conversao}%` : "—"} color={r.taxa_conversao >= 50 ? C.green : r.taxa_conversao >= 25 ? C.amber : C.red} /> },
                   ]}
                   data={etiquetasContatosFilt}
