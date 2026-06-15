@@ -583,7 +583,7 @@ export default function Dashboard({ token }) {
     setRankingLoading(true);
     const raw = await rpc("dashboard_ranking", token, selectedPanel, { p_period: teamPeriod });
     const r = parseRpcResponse(raw, "dashboard_ranking");
-    if (Array.isArray(r)) setRanking(r.map(i => ({ responsavel: i.responsavel, total: parseInt(i.total) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, receita: parseFloat(i.receita) || 0, taxa: parseFloat(i.taxa) || 0 })));
+    if (Array.isArray(r)) setRanking(r.map(i => ({ responsavel: i.responsavel, total: parseInt(i.total) || 0, ganhos: parseInt(i.ganhos) || 0, perdidos: parseInt(i.perdidos) || 0, receita: parseFloat(i.receita) || 0, taxa: parseFloat(i.taxa) || 0, ganhos_detalhe: Array.isArray(i.ganhos_detalhe) ? i.ganhos_detalhe : [] })));
     setRankingLoading(false);
   }, [token, selectedPanel, teamPeriod]);
 
@@ -628,7 +628,10 @@ export default function Dashboard({ token }) {
   const rankCols = [
     { key: "responsavel", label: "Responsável", bold: true },
     { key: "total", label: "Total", align: "center" },
-    { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green },
+    { key: "ganhos", label: "Ganhos", align: "center", color: () => C.green,
+      tooltip: r => r.ganhos_detalhe?.length
+        ? r.ganhos_detalhe.map(d => `${d.won_at}  ${d.title || "—"}${d.valor ? "  " + formatBRL(d.valor) : ""}`).join("\n")
+        : null },
     { key: "perdidos", label: "Perdidos", align: "center", color: () => C.red },
     { key: "receita", label: "Receita", align: "right", mono: true, render: r => formatBRL(r.receita), tooltip: r => fullBRL(r.receita) },
     { key: "taxa", label: "Conversão", align: "center", render: r => <Badge text={r.taxa ? `${r.taxa}%` : "—"} color={r.taxa >= 50 ? C.green : r.taxa >= 25 ? C.amber : C.red} /> },

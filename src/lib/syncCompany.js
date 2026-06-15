@@ -177,6 +177,11 @@ export async function syncCompany(companyId) {
     }
   }
 
+  await callRpc("admin_update_won_at", {
+    p_rpc_token:  ADMIN_RPC_TOKEN,
+    p_company_id: companyId,
+  });
+
   return {
     ok: true,
     synced: stats,
